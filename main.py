@@ -1,9 +1,18 @@
 import streamlit as st
+st.write("Installing dependencies...")
+st.run("pip install plotly")
+
 import pandas as pd 
 import plotly.express as px
 import math
 import numpy as np
 from streamlit_extras.add_vertical_space import add_vertical_space
+import seaborn as sns
+import matplotlib.pyplot as plt
+from scipy import stats
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from scipy.spatial.distance import cdist
 
 st.set_page_config(layout="wide")
 
@@ -14,7 +23,7 @@ def convert_df(df):
 
 def main():
     st.title("BGorgeous")
-    st.subheader("Customer Behavior Analysis", divider='violet')
+    st.subheader("GT Kovilambakkam Dashboard", divider='violet')
     st.markdown("Data Refresh Date: 14 November 2023")
 
     tickets_df = pd.read_csv("data/Tickets_14Nov23_4pm.csv", encoding='ISO-8859-1', low_memory=False)
@@ -27,6 +36,8 @@ def main():
     clients_df = clients_df[~clients_df['ClientID'].isin(exclude_values)]
 
     col1, col2, col3, col4 = st.columns(4)
+
+    st.subheader("Business Metrics by Year")
 
     tickets_df['Total'] = tickets_df['Total'].fillna(0)
     total_sales = sum(tickets_df['Total'])
@@ -63,13 +74,11 @@ def main():
     tickets_details_df['Bill_Time'] = tickets_details_df['Bill_DateTime'].dt.time
     tickets_details_df = tickets_details_df.drop(columns=['Bill_DateTime', 'Start_Time'])
 
+
     chart1, chart2, chart3 = st.columns(3)
 
     with chart1:
-        
-        st.subheader(f"Total Sales in {selected_year}")
         tickets_filt = tickets_df[tickets_df['Bill_Date'].dt.year == selected_year]
-        
         title = f"Total Sales Made in {selected_year}"
         fig = px.bar(
                 tickets_filt, 
@@ -78,23 +87,29 @@ def main():
                 title = title, 
                 color_discrete_sequence = ["#8633de"])
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+        total_revenue = tickets_filt['Total'].sum()
+        
+        st.markdown(
+        "You made a total revenue of **{}** in {}.".format(
+            f"₹{total_revenue:,.2f}", selected_year
+        )
+    )
 
     with chart2:
-        st.subheader(f"Total Services in {selected_year}")
+        title = f"Total Services Made in {selected_year}"
         services = tickets_details_df[tickets_details_df['Type'] == 'S']
         services['Bill_Date'] = pd.to_datetime(services['Bill_Date'], format='%d-%m-%Y')
         services_filtered = services[services['Bill_Date'].dt.year == selected_year]
-        fig = px.histogram(services_filtered, x='Bill_Date', title='Services by Date', color_discrete_sequence = ["#8633de"])
+        fig = px.histogram(services_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
     
     with chart3:
-        st.subheader(f"Total Products Sold in {selected_year}")
+        title = f"Total Products Sold in {selected_year}"
         products = tickets_details_df[tickets_details_df['Type'] == 'P']
         products['Bill_Date'] = pd.to_datetime(products['Bill_Date'], format='%d-%m-%Y')
         products_filtered = products[products['Bill_Date'].dt.year == selected_year]
-        fig = px.histogram(products_filtered, x='Bill_Date', title='Products sold by Date', color_discrete_sequence = ["#8633de"])
+        fig = px.histogram(products_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
-
 
     
     # Performing an inner merge based on the common column 'ticket_id'
@@ -134,7 +149,6 @@ def main():
             'Median Spend': grouped.values
         })
 
-        st.subheader(f"Median Spend by Gender in {selected_year}")
         fig = px.bar(df, x='Median Spend', y='Gender', orientation='h', 
                     labels={'Median Spend': 'Median Spend', 'Gender': 'Gender'},
                     title=f"Median Spend by Gender in {selected_year}", color_discrete_sequence = ["#8633de"])
@@ -147,7 +161,6 @@ def main():
         clients = pd.DataFrame(clients_filt["category"].dropna().value_counts()).reset_index()
         clients.columns = ["Category", "Count"]
 
-        st.subheader(f"Types of Customers in {selected_year}")
         title = f"Customer Types in {selected_year}"
         fig = px.pie(clients, values='Count', names='Category', title=title, color_discrete_sequence = ["#8633de"])
 
@@ -156,51 +169,78 @@ def main():
 
     st.divider()
 
-    st.subheader("RFM Model")
+    st.subheader("Customer Segmentation and RFM Analysis")
+    st.markdown("Clustering of customers based on RFM values and scoring customers based on the combined RFM score")
 
+    tickets_details_df['NumServices'] = tickets_details_df.groupby('TicketID')['TicketID'].transform('count')
+    df3_subset = tickets_details_df[['TicketID', 'NumServices']]
+    df4_subset = tickets_df[['TicketID', 'ClientID', 'Total', 'Bill_Date']]
+
+    sales_df = pd.merge(df3_subset, df4_subset, on='TicketID', how='right')
+    sales_df = sales_df.drop_duplicates(subset=['TicketID'])
+    sales_df = sales_df[sales_df['ClientID'] != "0"]
+    
     cutoff_date = tickets_df['Bill_Date'].max()
-    tickets_df['Num_Visits'] = tickets_df.groupby('ClientID')['ClientID'].transform('count')
+    sales_df['LastVisit'] = (cutoff_date - sales_df.groupby('ClientID')['Bill_Date'].transform('max')).dt.days
+    sales_df = sales_df.groupby('ClientID').agg({'NumServices': 'sum', 'Total': 'sum', 'LastVisit': 'max'}).reset_index()
+    sales_df.rename(columns={'Total': 'TotalSpend'}, inplace=True)
+    sales_df.rename(columns={'TotalSpend': 'Monetary', 'NumServices': 'Frequency', 'LastVisit': 'Recency'}, inplace=True)
 
-    fm_df = tickets_df.groupby('ClientID').agg({'Num_Visits': 'sum', 'Total': 'sum'}).reset_index()
-    fm_df["Frequency"] = tickets_df["Num_Visits"]
-    fm_df["Monetary"] = tickets_df["Total"]
-    fm_df = fm_df.drop_duplicates()
+    customers_fix = pd.DataFrame()
+    customers_fix["Recency"] = pd.Series(np.cbrt(sales_df['Recency'])).values
+    customers_fix["Frequency"] = stats.boxcox(sales_df['Frequency'])[0]
+    customers_fix["MonetaryValue"] = pd.Series(np.cbrt(sales_df['Monetary'])).values
+    customers_fix.tail()
 
-    tickets_df['Recency'] = (cutoff_date - tickets_df.groupby('ClientID')['Bill_Date'].transform('max')).dt.days
-    recency_df = tickets_df[['ClientID', 'Recency']]
-    recency_df = recency_df.drop_duplicates()
-    
-    rfm_df = pd.merge(fm_df, recency_df, on='ClientID', how='outer')
-    rfm_df = pd.merge(clients_df, rfm_df, on='ClientID', how='left')
+    scaler = StandardScaler()
+    # Fit and Transform The Data
+    scaler.fit(customers_fix)
+    customers_normalized = scaler.transform(customers_fix)
 
-    rfm_df['RecencyScore'] = pd.qcut (rfm_df['Recency'], q = 5, labels = ['5', '4', '3', '2', '1'])
-    rfm_df['FrequencyScore'] = pd.qcut (rfm_df['Frequency'], q = 5, labels = ['1', '2', '3', '4', '5'])
-    rfm_df['MonetaryScore'] = pd.qcut (rfm_df['Monetary'], q = 5, labels = ['1', '2', '3', '4', '5'])
 
-    rfm_df = rfm_df.dropna(subset=['RecencyScore', 'FrequencyScore', 'MonetaryScore'])
+    model = KMeans(n_clusters=3, random_state=42)
+    model.fit(customers_normalized)
 
-    
-    rfm_df.loc[:, 'RFM_score'] = rfm_df['RecencyScore'].astype(int) + rfm_df['MonetaryScore'].astype(int) + rfm_df['FrequencyScore'].astype(int)
+    sales_df["Cluster"] = model.labels_
+    sales_df.loc[:, "Cluster Segment"] = ""
+    sales_df.loc[sales_df.loc[:, "Cluster"] == 2, "Cluster Segment"] = "At Risk Customers"
+    sales_df.loc[sales_df.loc[:, "Cluster"] == 1, "Cluster Segment"] = "Lost/Churned Customers"
+    sales_df.loc[sales_df.loc[:, "Cluster"] == 0, "Cluster Segment"] = "New Customers"
+    #sales_df.loc[(sales_df.loc[:, 'RFM_score'] < 4), 'RFM Customer Segments'] = "Lost"
 
-    segment_labels = ["Low-Value", "Mid-Value", "High-Value"]
-    rfm_df.loc[:, "Value_Segment"] = pd.qcut(rfm_df["RFM_score"], q=3, labels=segment_labels)
-    #st.dataframe(rfm_df[['ClientID', 'Value_Segment', 'RFM_score', 'Recency', 'Frequency', 'Monetary', 'RecencyScore', 'FrequencyScore', 'MonetaryScore']])
+    df_normalized = pd.DataFrame(customers_normalized, columns=['Recency', 'Frequency', 'MonetaryValue'])
+    df_normalized['ID'] = sales_df.index
+    df_normalized['Cluster'] = model.labels_
+    df_normalized['Cluster Segment'] = sales_df['Cluster Segment']
+
+    df_nor_melt = pd.melt(df_normalized.reset_index(),
+                      id_vars=['ID', 'Cluster Segment'],
+                      value_vars=['Recency','Frequency','MonetaryValue'],
+                      var_name='Attribute',
+                      value_name='Value')
+
+
+    # Aggregate data by each customer
+    fig3 = df_nor_melt.groupby('Cluster Segment').agg({'ID': lambda x: len(x)}).reset_index()
 
     value1, value2 = st.columns(2)
 
     with value1:
+        fig3.rename(columns={'ID': 'Count'}, inplace=True)
+        fig3['percent'] = (fig3['Count'] / fig3['Count'].sum()) * 100
+        fig3['percent'] = fig3['percent'].round(1)
 
-        st.subheader("Customer Value Segments")
-        st.markdown("All time")
-        value_segments_df = pd.DataFrame(rfm_df["Value_Segment"].value_counts()).reset_index()
-        value_segments_df.columns = ["Value_Segment", "Count"]
-        fig = px.bar(
-            value_segments_df,
-            x="Value_Segment",
-            y="Count",
-            title="Customers by Value Segment",
-            color_discrete_sequence=["#8633de"],
-        )
+        colors=['#b082f5','#825eb8','#8c42fc'] #color palette
+
+        fig = px.treemap(fig3, path=['Cluster Segment'],values='Count'
+                        , width=800, height=550
+                        ,title="Distribution of Cluster")
+
+        fig.update_layout(
+            treemapcolorway = colors, #defines the colors in the treemap
+            margin = dict(t=50, l=25, r=25, b=25))
+
+        fig.data[0].textinfo = 'label+text+value+percent root'
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
 
 
@@ -208,8 +248,8 @@ def main():
         #col1, _, = st.columns(2)
 
        # with col1:
-        st.subheader("High Value Customers")
-        high_val_customers = rfm_df[rfm_df['Value_Segment'] == "High-Value"]
+        st.subheader("Lost Customers")
+        high_val_customers = sales_df[sales_df['Cluster'] == 1]
         st.dataframe(high_val_customers.sample(3))
         csv = convert_df(high_val_customers)
         st.download_button(
@@ -221,8 +261,8 @@ def main():
 
 
         #with col1:
-        st.subheader("Mid Value Customers")
-        mid_val_customers = rfm_df[rfm_df['Value_Segment'] == "Mid-Value"]
+        st.subheader("At Risk Customers")
+        mid_val_customers = sales_df[sales_df['Cluster'] == 2]
         st.dataframe(mid_val_customers.sample(3))
         csv = convert_df(mid_val_customers)
         st.download_button(
@@ -242,7 +282,117 @@ def main():
               # file_name='low_value_customers.csv',
               #  mime='text/csv',
           #  )
+    
+    quantiles = sales_df[['Recency', 'Frequency', 'Monetary', 'Cluster']].quantile(q=[0.2,0.4,0.6,0.8])
+    quantiles = quantiles.to_dict()
+        
+    def RScore(x,p,d):
+        if x <= d[p][0.2]:
+            return 5
+        elif x <= d[p][0.4]:
+            return 4
+        elif x <= d[p][0.6]: 
+            return 3
+        elif x <= d[p][0.8]: 
+            return 2
+        else:
+            return 1   
+        
+    def FMScore(x,p,d):
+        if x <= d[p][0.2]:
+            return 1
+        elif x <= d[p][0.4]:
+            return 2
+        elif x <= d[p][0.6]: 
+            return 3
+        elif x <= d[p][0.8]: 
+            return 4
+        else:
+            return 5
+        
+    sales_df['R'] = sales_df['Recency'].apply(RScore, args=('Recency',quantiles,))
+    sales_df['F'] = sales_df['Frequency'].apply(FMScore, args=('Frequency',quantiles,))
+    sales_df['M'] = sales_df['Monetary'].apply(FMScore, args=('Monetary',quantiles,))
 
+    # Concat RFM quartile values to create RFM Segments
+    def join_rfm(x): 
+        return str(x['R']) + str(x['F']) + str(x['M'])
+        
+    sales_df['RFM_Segment'] = sales_df.apply(join_rfm, axis=1)
+    # Calculate RFM_Score
+    sales_df['RFM_Score'] = sales_df[['R','F','M']].sum(axis=1)
+
+    # Create human friendly RFM labels
+    segt_map = {
+        
+        r'[1-2][1-2]': 'Hibernating',
+        r'[1-2][3-4]': 'At risk',
+        r'[1-2]5': 'Can\'t lose them',
+        r'3[1-2]': 'About to sleep',
+        r'33': 'Need attention',
+        r'[3-4][4-5]': 'Loyal customers',
+        r'41': 'Promising',
+        r'51': 'New customers',
+        r'[4-5][2-3]': 'Potential loyalists',
+        r'5[4-5]': 'Champions'
+    }
+    # rfm['Segment'] = rfm['R'].map(str) + rfm['F'].map(str)+ rfm['M'].map(str)
+    sales_df['Segment'] = sales_df['R'].map(str) + sales_df['F'].map(str)
+    sales_df['Segment'] = sales_df['Segment'].replace(segt_map, regex=True)
+    # Create some human friendly labels for the scores
+    sales_df['Score'] = 'Green'
+    sales_df.loc[sales_df['RFM_Score']>5,'Score'] = 'Bronze' 
+    sales_df.loc[sales_df['RFM_Score']>7,'Score'] = 'Silver' 
+    sales_df.loc[sales_df['RFM_Score']>9,'Score'] = 'Gold' 
+    sales_df.loc[sales_df['RFM_Score']>10,'Score'] = 'Platinum'
+
+    col1, col2 = st.columns(2)
+
+    # Aggregate data by each customer
+    fig3 = sales_df.groupby('Segment').agg({'ClientID': lambda x: len(x)}).reset_index()
+
+    # Rename columns
+    fig3.rename(columns={'ClientID': 'Count'}, inplace=True)
+    fig3['percent'] = (fig3['Count'] / fig3['Count'].sum()) * 100
+    fig3['percent'] = fig3['percent'].round(1)
+
+
+    colors=['#83af70','#9fbf8f','#bad0af','#d5e0cf','#f1f1f1','#f1d4d4','#f0b8b8','#ec9c9d'] #color palette
+
+    fig = px.treemap(fig3, path=['Segment'],values='Count'
+                    , width=800, height=400
+                    ,title="RFM Segments")
+
+    fig.update_layout(
+        treemapcolorway = colors, #defines the colors in the treemap
+        margin = dict(t=50, l=25, r=25, b=25))
+
+    fig.data[0].textinfo = 'label+text+value+percent root'
+    col1.plotly_chart(fig, theme="streamlit", use_container_width=True)
+
+    # Aggregate data by each customer
+    fig4 = sales_df.groupby('Score').agg({'ClientID': lambda x: len(x)}).reset_index()
+
+    # Rename columns
+    fig4.rename(columns={'ClientID': 'Count'}, inplace=True)
+    fig4['percent'] = (fig4['Count'] / fig4['Count'].sum()) * 100
+    fig4['percent'] = fig4['percent'].round(1)
+
+    colors=['#bad0af','#d5e0cf','#f1f1f1','#f1d4d4'] #color palette
+
+    fig = px.treemap(fig4, path=['Score'],values='Count'
+                    , width=800, height=400
+                    ,title="Treemap of RFM Score")
+
+    fig.update_layout(
+        treemapcolorway = colors, #defines the colors in the treemap
+        margin = dict(t=50, l=25, r=25, b=25))
+
+    fig.data[0].textinfo = 'label+text+value+percent root'
+    col2.plotly_chart(fig, theme='streamlit', use_container_width=True)
+        
+
+    
 
 
 if __name__ == "__main__":
