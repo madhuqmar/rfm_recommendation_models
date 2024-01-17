@@ -11,6 +11,7 @@ from scipy import stats
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import cdist
+from datetime import datetime
 
 st.set_page_config(layout="wide")
 
@@ -86,10 +87,15 @@ def main():
                 color_discrete_sequence = ["#8633de"])
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
         total_revenue = tickets_filt['Total'].sum()
-        
+            # Find the index of the row with the maximum value in the 'Salary' column
+        max_sales_index = tickets_filt['Total'].idxmax()
+        biggest_date = tickets_filt.loc[max_sales_index, 'Bill_Date']
+        biggest_date = datetime.strptime(str(biggest_date), "%Y-%m-%d %H:%M:%S")
+        biggest_date = biggest_date.strftime("%B %d, %Y")
+                
         st.markdown(
-        "You made a total revenue of **{}** in {}.".format(
-            f"₹{total_revenue:,.2f}", selected_year
+        "You made a total revenue of **{}** in {}. Your biggest day of sales was on **{}**.".format(
+            f"₹{total_revenue:,.2f}", selected_year, biggest_date
         )
     )
 
@@ -100,6 +106,11 @@ def main():
         services_filtered = services[services['Bill_Date'].dt.year == selected_year]
         fig = px.histogram(services_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+        st.markdown(
+        "Most popular services this month were..."
+        #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
+       # )
+    )
     
     with chart3:
         title = f"Total Products Sold in {selected_year}"
@@ -108,6 +119,11 @@ def main():
         products_filtered = products[products['Bill_Date'].dt.year == selected_year]
         fig = px.histogram(products_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+        st.markdown(
+        "Most popular products this month were..."
+        #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
+       # )
+    )
 
     
     # Performing an inner merge based on the common column 'ticket_id'
@@ -184,14 +200,16 @@ def main():
     sales_df.rename(columns={'Total': 'TotalSpend'}, inplace=True)
     sales_df.rename(columns={'TotalSpend': 'Monetary', 'NumServices': 'Frequency', 'LastVisit': 'Recency'}, inplace=True)
 
+   
+
     customers_fix = pd.DataFrame()
     customers_fix["Recency"] = pd.Series(np.cbrt(sales_df['Recency'])).values
     customers_fix["Frequency"] = stats.boxcox(sales_df['Frequency'])[0]
-    customers_fix["MonetaryValue"] = pd.Series(np.cbrt(sales_df['Monetary'])).values
+    customers_fix["Monetary"] = pd.Series(np.cbrt(sales_df['Monetary'])).values
     customers_fix.tail()
 
+
     scaler = StandardScaler()
-    # Fit and Transform The Data
     scaler.fit(customers_fix)
     customers_normalized = scaler.transform(customers_fix)
 
@@ -204,83 +222,20 @@ def main():
     sales_df.loc[sales_df.loc[:, "Cluster"] == 2, "Cluster Segment"] = "At Risk Customers"
     sales_df.loc[sales_df.loc[:, "Cluster"] == 1, "Cluster Segment"] = "Lost/Churned Customers"
     sales_df.loc[sales_df.loc[:, "Cluster"] == 0, "Cluster Segment"] = "New Customers"
-    #sales_df.loc[(sales_df.loc[:, 'RFM_score'] < 4), 'RFM Customer Segments'] = "Lost"
 
-    df_normalized = pd.DataFrame(customers_normalized, columns=['Recency', 'Frequency', 'MonetaryValue'])
+    df_normalized = pd.DataFrame(customers_normalized, columns=['Recency', 'Frequency', 'Monetary'])
     df_normalized['ID'] = sales_df.index
     df_normalized['Cluster'] = model.labels_
     df_normalized['Cluster Segment'] = sales_df['Cluster Segment']
 
+    
+
     df_nor_melt = pd.melt(df_normalized.reset_index(),
                       id_vars=['ID', 'Cluster Segment'],
-                      value_vars=['Recency','Frequency','MonetaryValue'],
+                      value_vars=['Recency','Frequency','Monetary'],
                       var_name='Attribute',
                       value_name='Value')
 
-
-    # Aggregate data by each customer
-    fig3 = df_nor_melt.groupby('Cluster Segment').agg({'ID': lambda x: len(x)}).reset_index()
-
-    value1, value2 = st.columns(2)
-
-    with value1:
-        fig3.rename(columns={'ID': 'Count'}, inplace=True)
-        fig3['percent'] = (fig3['Count'] / fig3['Count'].sum()) * 100
-        fig3['percent'] = fig3['percent'].round(1)
-
-        colors=['#b082f5','#825eb8','#8c42fc'] #color palette
-
-        fig = px.treemap(fig3, path=['Cluster Segment'],values='Count'
-                        , width=800, height=550
-                        ,title="Distribution of Cluster")
-
-        fig.update_layout(
-            treemapcolorway = colors, #defines the colors in the treemap
-            margin = dict(t=50, l=25, r=25, b=25))
-
-        fig.data[0].textinfo = 'label+text+value+percent root'
-        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
-
-
-    with value2:
-        #col1, _, = st.columns(2)
-
-       # with col1:
-        st.subheader("Lost Customers")
-        high_val_customers = sales_df[sales_df['Cluster'] == 1]
-        st.dataframe(high_val_customers.sample(3))
-        csv = convert_df(high_val_customers)
-        st.download_button(
-            label="Download high value customer data",
-            data=csv,
-            file_name='high_value_customers.csv',
-            mime='text/csv', use_container_width=True
-        )
-
-
-        #with col1:
-        st.subheader("At Risk Customers")
-        mid_val_customers = sales_df[sales_df['Cluster'] == 2]
-        st.dataframe(mid_val_customers.sample(3))
-        csv = convert_df(mid_val_customers)
-        st.download_button(
-            label="Download mid value customer data",
-            data=csv,
-            file_name='mid_value_customers.csv',
-            mime='text/csv', use_container_width=True
-        )
-
-       # with col1:
-           # st.subheader("Low Value Customers")
-            #low_val_customers = rfm_df[rfm_df['Value_Segment'] == "Low-Value"]
-            #st.dataframe(low_val_customers.sample(5))
-            #csv = convert_df(low_val_customers)
-           # st.download_button(
-              #  data=csv,
-              # file_name='low_value_customers.csv',
-              #  mime='text/csv',
-          #  )
-    
     quantiles = sales_df[['Recency', 'Frequency', 'Monetary', 'Cluster']].quantile(q=[0.2,0.4,0.6,0.8])
     quantiles = quantiles.to_dict()
         
@@ -344,50 +299,145 @@ def main():
     sales_df.loc[sales_df['RFM_Score']>9,'Score'] = 'Gold' 
     sales_df.loc[sales_df['RFM_Score']>10,'Score'] = 'Platinum'
 
+
+    value1, value2 = st.columns(2)
+
+    with value1:
+         # Aggregate data by each customer
+        fig3 = df_nor_melt.groupby('Cluster Segment').agg({'ID': lambda x: len(x)}).reset_index()
+        fig3.rename(columns={'ID': 'Count'}, inplace=True)
+        fig3['percent'] = (fig3['Count'] / fig3['Count'].sum()) * 100
+        fig3['percent'] = fig3['percent'].round(1)
+
+        colors=['#b082f5','#825eb8','#8c42fc'] #color palette
+
+        fig = px.treemap(fig3, path=['Cluster Segment'],values='Count'
+                        , width=800, height=550
+                        ,title="AI Generated Clusters from RFM Values")
+
+        fig.update_layout(
+            treemapcolorway = colors, #defines the colors in the treemap
+            margin = dict(t=50, l=25, r=25, b=25))
+
+        fig.data[0].textinfo = 'label+text+value+percent root'
+        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+
+    with value2:
+        # Aggregate data by each customer
+        fig4 = sales_df.groupby('Segment').agg({'ClientID': lambda x: len(x)}).reset_index()
+
+        # Rename columns
+        fig4.rename(columns={'ClientID': 'Count'}, inplace=True)
+        fig4['percent'] = (fig4['Count'] / fig4['Count'].sum()) * 100
+        fig4['percent'] = fig4['percent'].round(1)
+
+
+        colors=['#713ebd','#9771d1','#7d5cad','#a386cf','#6f1aed','#7b38e0','#c2aae6','#6b0ec2'] #color palette
+
+        fig = px.treemap(fig4, path=['Segment'],values='Count'
+                        , width=800, height=550
+                        ,title="RFM Segments")
+
+        fig.update_layout(
+            treemapcolorway = colors, #defines the colors in the treemap
+            margin = dict(t=50, l=25, r=25, b=25))
+
+        fig.data[0].textinfo = 'label+text+value+percent root'
+        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+
+
     col1, col2 = st.columns(2)
+    clients_subset = clients_df[['ClientID', 'FirstName', 'LastName', 'HomePhone', 'Sex', 'DOB', 'survey', 'MembershipCardNo',
+                        'Membership_Date']]
+    with col1:
+        fig5 = sales_df.groupby('Score').agg({'ClientID': lambda x: len(x)}).reset_index()
 
-    # Aggregate data by each customer
-    fig3 = sales_df.groupby('Segment').agg({'ClientID': lambda x: len(x)}).reset_index()
+        # Rename columns
+        fig5.rename(columns={'ClientID': 'Count'}, inplace=True)
+        fig5['percent'] = (fig5['Count'] / fig5['Count'].sum()) * 100
+        fig5['percent'] = fig5['percent'].round(1)
 
-    # Rename columns
-    fig3.rename(columns={'ClientID': 'Count'}, inplace=True)
-    fig3['percent'] = (fig3['Count'] / fig3['Count'].sum()) * 100
-    fig3['percent'] = fig3['percent'].round(1)
+        colors=['#613787','#9d81b8','#7717d1','#7d6296', '#8400ff'] #color palette
 
+        fig = px.treemap(fig5, path=['Score'],values='Count'
+                        , width=800, height=800
+                        ,title="Customers segmented by RFM Scores")
 
-    colors=['#83af70','#9fbf8f','#bad0af','#d5e0cf','#f1f1f1','#f1d4d4','#f0b8b8','#ec9c9d'] #color palette
+        fig.update_layout(
+            treemapcolorway = colors, #defines the colors in the treemap
+            margin = dict(t=50, l=25, r=25, b=25))
 
-    fig = px.treemap(fig3, path=['Segment'],values='Count'
-                    , width=800, height=400
-                    ,title="RFM Segments")
+        fig.data[0].textinfo = 'label+text+value+percent root'
+        st.plotly_chart(fig, theme='streamlit', use_container_width=True)
 
-    fig.update_layout(
-        treemapcolorway = colors, #defines the colors in the treemap
-        margin = dict(t=50, l=25, r=25, b=25))
+    
+    with col2:
+        st.markdown("**Gold Customers**")
+        gold_customers = sales_df[sales_df['Score'] == "Gold"]
+        gold_customers = pd.merge(gold_customers, clients_subset, on='ClientID', how='left')
+        desired_columns = ['ClientID', 'Cluster Segment', 'FirstName', 'LastName', 'Segment', 'Score', 'HomePhone',
+                            'Sex', 'DOB', 'survey', 'MembershipCardNo', 'Membership_Date']
+        gold_customers = gold_customers[desired_columns]
+        st.dataframe(gold_customers.sample(3))
+        csv = convert_df(gold_customers)
+        st.download_button(
+            label="Download gold customer data",
+            data=csv,
+            file_name='gold_customers.csv',
+            mime='text/csv', use_container_width=True
+        )
 
-    fig.data[0].textinfo = 'label+text+value+percent root'
-    col1.plotly_chart(fig, theme="streamlit", use_container_width=True)
+        st.markdown("**Platinum Customers**")
+        platinum_customers = sales_df[sales_df['Score'] == "Platinum"]
+        platinum_customers = pd.merge(platinum_customers, clients_subset, on='ClientID', how='left')
+        platinum_customers = platinum_customers[desired_columns]
+        st.dataframe(platinum_customers.sample(3))
+        csv = convert_df(platinum_customers)
+        st.download_button(
+            label="Download platinum customer data",
+            data=csv,
+            file_name='platinum_customers.csv',
+            mime='text/csv', use_container_width=True
+        )
 
-    # Aggregate data by each customer
-    fig4 = sales_df.groupby('Score').agg({'ClientID': lambda x: len(x)}).reset_index()
+        st.markdown("**Green Customers**")
+        green_customers = sales_df[sales_df['Score'] == "Green"]
+        green_customers = pd.merge(green_customers, clients_subset, on='ClientID', how='left')
+        green_customers = green_customers[desired_columns]
+        st.dataframe(green_customers.sample(3))
+        csv = convert_df(green_customers)
+        st.download_button(
+            label="Download green customer data",
+            data=csv,
+            file_name='green_customers.csv',
+            mime='text/csv', use_container_width=True
+        )
 
-    # Rename columns
-    fig4.rename(columns={'ClientID': 'Count'}, inplace=True)
-    fig4['percent'] = (fig4['Count'] / fig4['Count'].sum()) * 100
-    fig4['percent'] = fig4['percent'].round(1)
+        st.markdown("**Bronze Customers**")
+        bronze_customers = sales_df[sales_df['Score'] == "Bronze"]
+        bronze_customers = pd.merge(bronze_customers, clients_subset, on='ClientID', how='left')
+        bronze_customers = bronze_customers[desired_columns]
+        st.dataframe(bronze_customers.sample(3))
+        csv = convert_df(bronze_customers)
+        st.download_button(
+            label="Download bronze customer data",
+            data=csv,
+            file_name='bronze_customers.csv',
+            mime='text/csv', use_container_width=True
+        )
 
-    colors=['#bad0af','#d5e0cf','#f1f1f1','#f1d4d4'] #color palette
-
-    fig = px.treemap(fig4, path=['Score'],values='Count'
-                    , width=800, height=400
-                    ,title="Treemap of RFM Score")
-
-    fig.update_layout(
-        treemapcolorway = colors, #defines the colors in the treemap
-        margin = dict(t=50, l=25, r=25, b=25))
-
-    fig.data[0].textinfo = 'label+text+value+percent root'
-    col2.plotly_chart(fig, theme='streamlit', use_container_width=True)
+        st.markdown("**Silver Customers**")
+        silver_customers = sales_df[sales_df['Score'] == "Silver"]
+        silver_customers = pd.merge(silver_customers, clients_subset, on='ClientID', how='left')
+        silver_customers = silver_customers[desired_columns]
+        st.dataframe(silver_customers.sample(3))
+        csv = convert_df(silver_customers)
+        st.download_button(
+            label="Download silver customer data",
+            data=csv,
+            file_name='silver_customers.csv',
+            mime='text/csv', use_container_width=True
+        )
         
 
     
