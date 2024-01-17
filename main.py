@@ -1,6 +1,4 @@
 import streamlit as st
-st.write("Installing dependencies...")
-st.run("pip install plotly")
 
 import pandas as pd 
 import plotly.express as px
