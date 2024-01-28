@@ -21,9 +21,11 @@ def convert_df(df):
 
 
 def intro():
-    import streamlit as st
+
+    image_path = 'data/BGorgeous.png'
 
     st.write("# Welcome to BGorgeous Demos! 👋")
+    st.image(image_path, caption='Your Image Caption', use_column_width=True)
     st.sidebar.success("Select a demo above.")
 
     st.markdown(
@@ -34,8 +36,7 @@ def intro():
     )
 
 def business_dashboard():
-    st.title("BGorgeous")
-    st.subheader("GT Kovilambakkam Dashboard", divider='violet')
+    st.header("GT Kovilambakkam Business Dashboard", divider='violet')
     st.markdown("Data Refresh Date: 14 November 2023")
 
     tickets_df = pd.read_csv("data/Tickets_14Nov23_4pm.csv", encoding='ISO-8859-1', low_memory=False)
@@ -47,12 +48,13 @@ def business_dashboard():
     exclude_values = ['.8220484146', '.8393863665', '.9894384197', 'C Balachander9884886817', '0', '..8220484146']
     clients_df = clients_df[~clients_df['ClientID'].isin(exclude_values)]
 
-    col1, col2, col3, col4 = st.columns(4)
-
-    st.subheader("Business Metrics by Year")
 
     tickets_df['Total'] = tickets_df['Total'].fillna(0)
     total_sales = sum(tickets_df['Total'])
+
+
+    col1, col2, col3, col4 = st.columns(4)
+
     col1.metric("Total Sales", f"₹{total_sales:,.2f}")
 
     try:
@@ -74,37 +76,67 @@ def business_dashboard():
     total_customers = len(clients_df['ClientID'].unique())
     col4.metric("Total Customers Served", f"{total_customers:,}")
 
+    
+
     #Getting Years Extracted
     tickets_df['Bill_Date'] = pd.to_datetime(tickets_df['Created_Date'])
     unique_years = tickets_df['Bill_Date'].dt.year.unique()
     year_list = [x for x in unique_years if not math.isnan(x)]
     year_list = [int(x) for x in year_list]
-    selected_year = st.selectbox('Select Year', year_list)
+    
 
     tickets_details_df['Bill_DateTime'] = pd.to_datetime(tickets_details_df['Start_Time'], format='%d-%m-%Y %H:%M', errors='coerce')
     tickets_details_df['Bill_Date'] = tickets_details_df['Bill_DateTime'].dt.date
     tickets_details_df['Bill_Time'] = tickets_details_df['Bill_DateTime'].dt.time
     tickets_details_df = tickets_details_df.drop(columns=['Bill_DateTime', 'Start_Time'])
+    tickets_df['Bill_Month'] = tickets_df['Bill_Date'].dt.strftime('%B')
 
+    st.session_state.tickets_details_df = tickets_details_df
+    st.session_state.tickets_df = tickets_df
+    st.session_state.clients_df = clients_df
+
+    box1, box2 = st.columns(2)
+    with box1:
+        selected_year = st.selectbox('Select Year', year_list)
+    with box2:
+        aggregate = st.selectbox("Select Aggregation:", ['Day', 'Month'])
 
     chart1, chart2, chart3 = st.columns(3)
 
     with chart1:
         tickets_filt = tickets_df[tickets_df['Bill_Date'].dt.year == selected_year]
-        title = f"Total Sales Made in {selected_year}"
-        fig = px.bar(
-                tickets_filt, 
-                x = 'Bill_Date', 
-                y = 'Total', 
-                title = title, 
-                color_discrete_sequence = ["#8633de"])
-        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
-        total_revenue = tickets_filt['Total'].sum()
-            # Find the index of the row with the maximum value in the 'Salary' column
-        max_sales_index = tickets_filt['Total'].idxmax()
-        biggest_date = tickets_filt.loc[max_sales_index, 'Bill_Date']
-        biggest_date = datetime.strptime(str(biggest_date), "%Y-%m-%d %H:%M:%S")
-        biggest_date = biggest_date.strftime("%B %d, %Y")
+        if aggregate == 'Day':
+            title = f"Daily Sales Made in {selected_year}"
+            fig = px.bar(
+                    tickets_filt, 
+                    x = 'Bill_Date', 
+                    y = 'Total', 
+                    title = title, 
+                    color_discrete_sequence = ["#8633de"])
+            st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+            total_revenue = tickets_filt['Total'].sum()
+                # Find the index of the row with the maximum value in the 'Salary' column
+            max_sales_index = tickets_filt['Total'].idxmax()
+            biggest_date = tickets_filt.loc[max_sales_index, 'Bill_Date']
+            biggest_date = datetime.strptime(str(biggest_date), "%Y-%m-%d %H:%M:%S")
+            biggest_date = biggest_date.strftime("%B %d, %Y")
+        
+        if aggregate == 'Month':
+            title = f"Monthly Sales Made in {selected_year}"
+            fig = px.bar(
+                    tickets_filt, 
+                    x = 'Bill_Month', 
+                    y = 'Total', 
+                    title = title, 
+                    color_discrete_sequence = ["#8633de"])
+            st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+            total_revenue = tickets_filt['Total'].sum()
+                # Find the index of the row with the maximum value in the 'Salary' column
+            max_sales_index = tickets_filt['Total'].idxmax()
+            biggest_date = tickets_filt.loc[max_sales_index, 'Bill_Date']
+            biggest_date = datetime.strptime(str(biggest_date), "%Y-%m-%d %H:%M:%S")
+            biggest_date = biggest_date.strftime("%B %d, %Y")
+
                 
         st.markdown(
         "You made a total revenue of **{}** in {}. Your biggest day of sales was on **{}**.".format(
@@ -114,32 +146,64 @@ def business_dashboard():
 
 
     with chart2:
-        title = f"Total Services Made in {selected_year}"
-        services = tickets_details_df[tickets_details_df['Type'] == 'S']
-        services['Bill_Date'] = pd.to_datetime(services['Bill_Date'])
-        #services['Bill_Date'] = pd.to_datetime(services['Start_Time'], format='%d-%m-%Y')
-        services_filtered = services[services['Bill_Date'].dt.year == selected_year]
-        fig = px.histogram(services_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
-        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
-        st.markdown(
-        "Most popular services this month were..."
-        #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
-       # )
-    )
+        if aggregate == 'Day':
+            title = f"Daily Services Provided in {selected_year}"
+            services = tickets_details_df[tickets_details_df['Type'] == 'S']
+            services['Bill_Date'] = pd.to_datetime(services['Bill_Date'])
+            #services['Bill_Date'] = pd.to_datetime(services['Start_Time'], format='%d-%m-%Y')
+            services_filtered = services[services['Bill_Date'].dt.year == selected_year]
+            fig = px.histogram(services_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
+            st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+            st.markdown(
+            "Most popular services this month were..."
+            #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
+        # )
+        )
+
+        if aggregate == 'Month':
+            title = f"Monthly Services Provided in {selected_year}"
+            services = tickets_details_df[tickets_details_df['Type'] == 'S']
+            services['Bill_Date'] = pd.to_datetime(services['Bill_Date'])
+            services['Bill_Month'] = services['Bill_Date'].dt.strftime('%B')
+            #services['Bill_Date'] = pd.to_datetime(services['Start_Time'], format='%d-%m-%Y')
+            services_filtered = services[services['Bill_Date'].dt.year == selected_year]
+            fig = px.histogram(services_filtered, x='Bill_Month', title=title, color_discrete_sequence = ["#8633de"])
+            st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+            st.markdown(
+            "Most popular services this month were..."
+            #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
+        # )
+        )
     
     with chart3:
-        title = f"Total Products Sold in {selected_year}"
-        products = tickets_details_df[tickets_details_df['Type'] == 'P']
-        #products['Bill_Date'] = pd.to_datetime(products['Bill_Date'], format='%d-%m-%Y')
-        products['Bill_Date'] = pd.to_datetime(products['Bill_Date'])
-        products_filtered = products[products['Bill_Date'].dt.year == selected_year]
-        fig = px.histogram(products_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
-        st.plotly_chart(fig, theme="streamlit", use_container_width=True)
-        st.markdown(
-        "Most popular products this month were..."
-        #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
-       # )
-    )
+        if aggregate == 'Day':
+            title = f"Daily Products Sold in {selected_year}"
+            products = tickets_details_df[tickets_details_df['Type'] == 'P']
+            #products['Bill_Date'] = pd.to_datetime(products['Bill_Date'], format='%d-%m-%Y')
+            products['Bill_Date'] = pd.to_datetime(products['Bill_Date'])
+            products_filtered = products[products['Bill_Date'].dt.year == selected_year]
+            fig = px.histogram(products_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
+            st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+            st.markdown(
+            "Most popular products this month were..."
+            #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
+        # )
+        )
+
+        if aggregate == 'Month':
+            title = f"Monthly Products Sold in {selected_year}"
+            products = tickets_details_df[tickets_details_df['Type'] == 'P']
+            #products['Bill_Date'] = pd.to_datetime(products['Bill_Date'], format='%d-%m-%Y')
+            products['Bill_Date'] = pd.to_datetime(products['Bill_Date'])
+            products['Bill_Month'] = products['Bill_Date'].dt.strftime('%B')
+            products_filtered = products[products['Bill_Date'].dt.year == selected_year]
+            fig = px.histogram(products_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
+            st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+            st.markdown(
+            "Most popular products this month were..."
+            #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
+        # )
+        )
 
     
     # Performing an inner merge based on the common column 'ticket_id'
@@ -170,7 +234,7 @@ def business_dashboard():
         #client_services_df['Bill_Date'] = pd.to_datetime(client_services_df['Bill_Date'], format='%d-%m-%Y')
         client_services_df['Bill_Date'] = pd.to_datetime(client_services_df['Bill_Date'])
         client_services_df_filtered = client_services_df[client_services_df['Bill_Date'].dt.year == selected_year]
-        grouped = client_services_df_filtered.groupby('Sex')['Total'].median()
+        grouped = client_services_df_filtered.groupby('Sex')['Total'].mean()
         gender_labels = {
         "F": 'Female',
         "M": 'Male'
@@ -182,7 +246,7 @@ def business_dashboard():
 
         fig = px.bar(df, x='Median Spend', y='Gender', orientation='h', 
                     labels={'Median Spend': 'Median Spend', 'Gender': 'Gender'},
-                    title=f"Median Spend by Gender in {selected_year}", color_discrete_sequence = ["#8633de"])
+                    title=f"AVB by Gender in {selected_year}", color_discrete_sequence = ["#8633de"])
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
     
     with cuscol2:
@@ -196,10 +260,17 @@ def business_dashboard():
         fig = px.pie(clients, values='Count', names='Category', title=title, color_discrete_sequence = ["#8633de"])
 
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
+    
+
+    
 
 
 
 def rfm_model():
+
+        tickets_details_df = st.session_state.tickets_details_df.copy()
+        tickets_df = st.session_state.tickets_df.copy()
+        clients_df = st.session_state.clients_df.copy()
 
         st.subheader("Customer Segmentation and RFM Analysis")
         st.markdown("Clustering of customers based on RFM values and scoring customers based on the combined RFM score")
@@ -388,13 +459,16 @@ def rfm_model():
             fig.data[0].textinfo = 'label+text+value+percent root'
             st.plotly_chart(fig, theme='streamlit', use_container_width=True)
 
+        desired_columns = ['ClientID', 'Cluster Segment', 'FirstName', 'LastName', 'Days since last visit', 
+                                        'Number of Visits', 'Total Billed', 'Segment', 'Score', 'HomePhone',
+                                'Sex', 'DOB', 'survey', 'MembershipCardNo', 'Membership_Date']
         
         with col2:
             st.markdown("**Gold Customers**")
             gold_customers = sales_df[sales_df['Score'] == "Gold"]
             gold_customers = pd.merge(gold_customers, clients_subset, on='ClientID', how='left')
-            desired_columns = ['ClientID', 'Cluster Segment', 'FirstName', 'LastName', 'Segment', 'Score', 'HomePhone',
-                                'Sex', 'DOB', 'survey', 'MembershipCardNo', 'Membership_Date']
+            gold_customers = gold_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+                         'Monetary': 'Total Billed'})
             gold_customers = gold_customers[desired_columns]
             st.dataframe(gold_customers.sample(3))
             csv = convert_df(gold_customers)
@@ -408,6 +482,8 @@ def rfm_model():
             st.markdown("**Platinum Customers**")
             platinum_customers = sales_df[sales_df['Score'] == "Platinum"]
             platinum_customers = pd.merge(platinum_customers, clients_subset, on='ClientID', how='left')
+            platinum_customers = platinum_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+                                    'Monetary': 'Total Billed'})
             platinum_customers = platinum_customers[desired_columns]
             st.dataframe(platinum_customers.sample(3))
             csv = convert_df(platinum_customers)
@@ -421,6 +497,8 @@ def rfm_model():
             st.markdown("**Green Customers**")
             green_customers = sales_df[sales_df['Score'] == "Green"]
             green_customers = pd.merge(green_customers, clients_subset, on='ClientID', how='left')
+            green_customers = green_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+                            'Monetary': 'Total Billed'})
             green_customers = green_customers[desired_columns]
             st.dataframe(green_customers.sample(3))
             csv = convert_df(green_customers)
@@ -434,6 +512,8 @@ def rfm_model():
             st.markdown("**Bronze Customers**")
             bronze_customers = sales_df[sales_df['Score'] == "Bronze"]
             bronze_customers = pd.merge(bronze_customers, clients_subset, on='ClientID', how='left')
+            bronze_customers = bronze_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+                    'Monetary': 'Total Billed'})
             bronze_customers = bronze_customers[desired_columns]
             st.dataframe(bronze_customers.sample(3))
             csv = convert_df(bronze_customers)
@@ -447,6 +527,8 @@ def rfm_model():
             st.markdown("**Silver Customers**")
             silver_customers = sales_df[sales_df['Score'] == "Silver"]
             silver_customers = pd.merge(silver_customers, clients_subset, on='ClientID', how='left')
+            silver_customers = silver_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+                            'Monetary': 'Total Billed'})
             silver_customers = silver_customers[desired_columns]
             st.dataframe(silver_customers.sample(3))
             csv = convert_df(silver_customers)
