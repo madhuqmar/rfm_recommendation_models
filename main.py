@@ -434,9 +434,9 @@ def rfm_model():
         sales_df.loc[sales_df['RFM_Score']>10,'Score'] = 'Platinum'
 
 
-        value1, value2 = st.columns(2)
+        cluster1, cluster2 = st.columns([1.5, 1])
 
-        with value1:
+        with cluster1:
             # Aggregate data by each customer
             fig3 = df_nor_melt.groupby('Cluster Segment').agg({'ID': lambda x: len(x)}).reset_index()
             fig3.rename(columns={'ID': 'Count'}, inplace=True)
@@ -446,7 +446,7 @@ def rfm_model():
             colors=['#b082f5','#825eb8','#8c42fc'] #color palette
 
             fig = px.treemap(fig3, path=['Cluster Segment'],values='Count'
-                            , width=800, height=550
+                            , width=800, height=400
                             ,title="AI Generated Clusters from RFM Values")
 
             fig.update_layout(
@@ -456,7 +456,18 @@ def rfm_model():
             fig.data[0].textinfo = 'label+text+value+percent root'
             st.plotly_chart(fig, theme="streamlit", use_container_width=True)
 
-        with value2:
+        with cluster2:
+            st.write("**What the clusters mean**")
+            st.write("#")
+            # Aggregate data by each customer
+            clusters_df = sales_df.groupby(['Cluster Segment']).agg({'ClientID': lambda x: len(x), 'Recency': 'mean', 'Frequency': 'mean', 'Monetary': 'mean' }).reset_index()
+            clusters_df.rename(columns={'ClientID': 'Customer_Count', 'Recency': 'Avg_Days_Since_Last_Visit', 'Frequency': 'Avg_Visits', 'Monetary': 'Avg_Bill_Value'}, inplace=True)
+            st.write(clusters_df)
+
+        
+        rfmseg1, rfmseg2 = st.columns([1.5, 1])
+
+        with rfmseg1:
             # Aggregate data by each customer
             fig4 = sales_df.groupby('Segment').agg({'ClientID': lambda x: len(x)}).reset_index()
 
@@ -469,7 +480,7 @@ def rfm_model():
             colors=['#713ebd','#9771d1','#7d5cad','#a386cf','#6f1aed','#7b38e0','#c2aae6','#6b0ec2'] #color palette
 
             fig = px.treemap(fig4, path=['Segment'],values='Count'
-                            , width=800, height=550
+                            , width=800, height=500
                             ,title="RFM Segments")
 
             fig.update_layout(
@@ -480,7 +491,16 @@ def rfm_model():
             st.plotly_chart(fig, theme="streamlit", use_container_width=True)
 
 
-        col1, col2 = st.columns(2)
+        with rfmseg2:
+            st.write("**What the RFM segments mean**")
+            st.write("#")
+            rfmseg_df = sales_df.groupby(['Segment']).agg({'ClientID': lambda x: len(x), 'Recency': 'mean', 'Frequency': 'mean', 'Monetary': 'mean' }).reset_index()
+            rfmseg_df.rename(columns={'ClientID': 'Customer_Count', 'Recency': 'Avg_Days_Since_Last_Visit', 'Frequency': 'Avg_Visits', 'Monetary': 'Avg_Bill_Value'}, inplace=True)
+            st.write(rfmseg_df)
+
+
+        col1, col2 = st.columns([1.5, 1])
+
         clients_subset = clients_df[['ClientID', 'FirstName', 'LastName', 'HomePhone', 'Sex', 'DOB', 'survey', 'MembershipCardNo',
                             'Membership_Date']]
         with col1:
@@ -494,8 +514,8 @@ def rfm_model():
             colors=['#613787','#9d81b8','#7717d1','#7d6296', '#8400ff'] #color palette
 
             fig = px.treemap(fig5, path=['Score'],values='Count'
-                            , width=800, height=800
-                            ,title="Customers segmented by RFM Scores")
+                            , width=800, height=400
+                            ,title="Customer Loyalty Buckets")
 
             fig.update_layout(
                 treemapcolorway = colors, #defines the colors in the treemap
@@ -509,21 +529,19 @@ def rfm_model():
                                 'Sex', 'DOB', 'survey', 'MembershipCardNo', 'Membership_Date']
         
         with col2:
-            st.markdown("**Gold Customers**")
-            gold_customers = sales_df[sales_df['Score'] == "Gold"]
-            gold_customers = pd.merge(gold_customers, clients_subset, on='ClientID', how='left')
-            gold_customers = gold_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
-                         'Monetary': 'Total Billed'})
-            gold_customers = gold_customers[desired_columns]
-            st.dataframe(gold_customers.sample(3))
-            csv = convert_df(gold_customers)
-            st.download_button(
-                label="Download gold customer data",
-                data=csv,
-                file_name='gold_customers.csv',
-                mime='text/csv', use_container_width=True
-            )
 
+            st.write("**What the loyalty buckets mean**")
+            st.write("#")
+            loyalty_df = sales_df.groupby(['Score']).agg({'ClientID': lambda x: len(x), 'Recency': 'mean', 'Frequency': 'mean', 'Monetary': 'mean' }).reset_index()
+            loyalty_df.rename(columns={'ClientID': 'Customer_Count', 'Recency': 'Avg_Days_Since_Last_Visit', 'Frequency': 'Avg_Visits', 'Monetary': 'Avg_Bill_Value'}, inplace=True)
+            st.write(loyalty_df)
+
+
+        st.write("Download Customer Data by Loyalty Bucket:")
+
+        best1, best2 = st.columns(2)
+
+        with best1:
             st.markdown("**Platinum Customers**")
             platinum_customers = sales_df[sales_df['Score'] == "Platinum"]
             platinum_customers = pd.merge(platinum_customers, clients_subset, on='ClientID', how='left')
@@ -538,37 +556,27 @@ def rfm_model():
                 file_name='platinum_customers.csv',
                 mime='text/csv', use_container_width=True
             )
-
-            st.markdown("**Green Customers**")
-            green_customers = sales_df[sales_df['Score'] == "Green"]
-            green_customers = pd.merge(green_customers, clients_subset, on='ClientID', how='left')
-            green_customers = green_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+        
+        with best2:
+            
+            st.markdown("**Gold Customers**")
+            gold_customers = sales_df[sales_df['Score'] == "Gold"]
+            gold_customers = pd.merge(gold_customers, clients_subset, on='ClientID', how='left')
+            gold_customers = gold_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
                             'Monetary': 'Total Billed'})
-            green_customers = green_customers[desired_columns]
-            st.dataframe(green_customers.sample(3))
-            csv = convert_df(green_customers)
+            gold_customers = gold_customers[desired_columns]
+            st.dataframe(gold_customers.sample(3))
+            csv = convert_df(gold_customers)
             st.download_button(
-                label="Download green customer data",
+                label="Download gold customer data",
                 data=csv,
-                file_name='green_customers.csv',
+                file_name='gold_customers.csv',
                 mime='text/csv', use_container_width=True
             )
 
-            st.markdown("**Bronze Customers**")
-            bronze_customers = sales_df[sales_df['Score'] == "Bronze"]
-            bronze_customers = pd.merge(bronze_customers, clients_subset, on='ClientID', how='left')
-            bronze_customers = bronze_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
-                    'Monetary': 'Total Billed'})
-            bronze_customers = bronze_customers[desired_columns]
-            st.dataframe(bronze_customers.sample(3))
-            csv = convert_df(bronze_customers)
-            st.download_button(
-                label="Download bronze customer data",
-                data=csv,
-                file_name='bronze_customers.csv',
-                mime='text/csv', use_container_width=True
-            )
+        secondb1, secondb2 = st.columns(2)
 
+        with secondb1:
             st.markdown("**Silver Customers**")
             silver_customers = sales_df[sales_df['Score'] == "Silver"]
             silver_customers = pd.merge(silver_customers, clients_subset, on='ClientID', how='left')
@@ -584,16 +592,60 @@ def rfm_model():
                 mime='text/csv', use_container_width=True
             )
 
+        with secondb2:
+            st.markdown("**Bronze Customers**")
+            bronze_customers = sales_df[sales_df['Score'] == "Bronze"]
+            bronze_customers = pd.merge(bronze_customers, clients_subset, on='ClientID', how='left')
+            bronze_customers = bronze_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+                    'Monetary': 'Total Billed'})
+            bronze_customers = bronze_customers[desired_columns]
+            st.dataframe(bronze_customers.sample(3))
+            csv = convert_df(bronze_customers)
+            st.download_button(
+                label="Download bronze customer data",
+                data=csv,
+                file_name='bronze_customers.csv',
+                mime='text/csv', use_container_width=True
+            )
+
+
+
+        # st.markdown("**Green Customers**")
+        # green_customers = sales_df[sales_df['Score'] == "Green"]
+        # green_customers = pd.merge(green_customers, clients_subset, on='ClientID', how='left')
+        # green_customers = green_customers.rename(columns={'Recency': 'Days since last visit', 'Frequency': 'Number of Visits',
+        #                 'Monetary': 'Total Billed'})
+        # green_customers = green_customers[desired_columns]
+        # st.dataframe(green_customers.sample(3))
+        # csv = convert_df(green_customers)
+        # st.download_button(
+        #     label="Download green customer data",
+        #     data=csv,
+        #     file_name='green_customers.csv',
+        #     mime='text/csv', use_container_width=True
+        # )
+
+
 def recommendation_model():
 
     st.subheader("Recommendation Model")
+
+    clients_df = st.session_state.clients_df.copy()
+
+    my_expander = st.expander("Select a Known Customer")
+    selected_customer_name = my_expander.selectbox("", clients_df["ClientID"].values[:-3])
+
+    if my_expander.button("Recommend Services for this Customer"):
+            st.text("Here are few services this customer will like..")
+            st.write("#")
+
 
     
 page_names_to_funcs = {
     "—": intro,
     "Business Dashboard Demo": business_dashboard,
     "RFM Model Demo": rfm_model,
-    "Recommendation Engine Demo": recommendation_model
+    "Recommendation Model Demo": recommendation_model
 }
 
 demo_name = st.sidebar.selectbox("Choose a demo", page_names_to_funcs.keys())
