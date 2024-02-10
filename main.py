@@ -1,5 +1,4 @@
 import streamlit as st
-
 import pandas as pd 
 import plotly.express as px
 import math
@@ -11,6 +10,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import cdist
 from datetime import datetime
+from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(layout="wide")
 
@@ -630,17 +630,64 @@ def recommendation_model():
 
     st.subheader("Recommendation Model")
 
-    clients_df = st.session_state.clients_df.copy()
+    tickets_df = pd.read_csv("data/Tickets_14Nov23_4pm.csv", encoding='ISO-8859-1', low_memory=False)
+    tickets_details_df = pd.read_csv("data/Ticket_Product_Details_14Nov23_4pm.csv", encoding='ISO-8859-1', 
+            low_memory=False)
 
-    my_expander = st.expander("Select a Known Customer")
-    selected_customer_name = my_expander.selectbox("", clients_df["ClientID"].values[:-3])
+    try:
+        tickets_df['TicketID'] = tickets_df['TicketID'].astype('int64')
+    except ValueError:
+        # Handle non-numeric values, for example, replacing them with NaN
+        tickets_df['TicketID'] = pd.to_numeric(tickets_df['TicketID'], errors='coerce')
 
-    if my_expander.button("Recommend Services for this Customer"):
-            st.text("Here are few services this customer will like..")
-            st.write("#")
+    client_services = pd.merge(tickets_details_df, tickets_df, on='TicketID', how='left')
+    
+    client_services['Frequency'] = client_services.groupby(['ClientID', 'Descr'])['ClientID'].transform('size')
+    client_services.reset_index(inplace=True)
 
+    # Define the values you want to exclude
+    values_to_exclude = ['35', '10', '0']  # Add all the values you want to exclude in this list
+    client_services = client_services[~client_services['Descr'].isin(values_to_exclude)]
+
+    client_services = client_services.drop_duplicates()
+
+    client_services = client_services[['ClientID', 'Descr', 'Frequency']]
+
+    client_services_sample = client_services.head(100)
+
+    pivot_df = client_services_sample.pivot_table(index='ClientID', columns='Descr', values='Frequency', fill_value=0)
+
+    # Set the threshold for similarity score
+    threshold = 0.1
+
+    # Calculate cosine similarity between customers
+    customer_similarity = cosine_similarity(pivot_df)
+
+    # Generate recommendations for each customer
+    recommendations = {}
+    for idx, customer in enumerate(pivot_df.index):
+        similar_customers = sorted(list(enumerate(customer_similarity[idx])), key=lambda x: x[1], reverse=True)
+        recommendations[customer] = []
+        for similar_customer, similarity_score in similar_customers[1:]:  # Exclude the customer itself
+            if similarity_score > threshold:  # Check if similarity score is above the threshold
+                similar_products = pivot_df.columns[pivot_df.iloc[similar_customer] > 0].tolist()
+                for product in similar_products:
+                    if pivot_df.loc[customer, product] == 0:  # Check if the customer hasn't bought the product yet
+                        recommendations[customer].append((product, similarity_score))  # Store the product and its similarity score
+
+
+    cust_list = client_services_sample["ClientID"].unique()
+    selected_customer_name = st.selectbox("Select a Known Customer", cust_list)
+
+    if st.button("Recommend Services for **{}**".format(selected_customer_name)):
+        st.text("Here are few services this customer will like..")
+        st.write("#")
+
+        st.json(recommendations[selected_customer_name])
 
     
+
+
 page_names_to_funcs = {
     "—": intro,
     "Business Dashboard Demo": business_dashboard,
