@@ -109,6 +109,16 @@ def business_dashboard():
         tickets_filt['Bill_Month'] = tickets_filt['Bill_Date'].dt.strftime('%B')
         tickets_filt_by_month = tickets_filt.groupby('Bill_Month')['Total'].sum().reset_index()
 
+        max_sales_index = tickets_filt['Total'].idxmax()
+        biggest_date = tickets_filt.loc[max_sales_index, 'Bill_Date']
+        biggest_date = datetime.strptime(str(biggest_date), "%Y-%m-%d %H:%M:%S")
+        biggest_date = biggest_date.strftime("%B %d, %Y")
+        biggest_day_sales = tickets_filt.loc[max_sales_index, 'Total']
+
+        biggest_month_index = tickets_filt_by_month['Total'].idxmax()
+        biggest_month = tickets_filt_by_month.loc[biggest_month_index, 'Bill_Month']
+        biggest_month_sales = tickets_filt_by_month.loc[biggest_month_index, 'Total']
+
         if aggregate == 'Day':
             title = f"Daily Sales Made in {selected_year}"
             fig = px.bar(
@@ -120,16 +130,7 @@ def business_dashboard():
             st.plotly_chart(fig, theme="streamlit", use_container_width=True)
             total_revenue = tickets_filt['Total'].sum()
             
-            # Find the index of the row with the maximum value in the 'Salary' column
-            max_sales_index = tickets_filt['Total'].idxmax()
-            biggest_date = tickets_filt.loc[max_sales_index, 'Bill_Date']
-            biggest_date = datetime.strptime(str(biggest_date), "%Y-%m-%d %H:%M:%S")
-            biggest_date = biggest_date.strftime("%B %d, %Y")
-            biggest_day_sales = tickets_filt.loc[max_sales_index, 'Total']
 
-            biggest_month_index = tickets_filt_by_month['Total'].idxmax()
-            biggest_month = tickets_filt_by_month.loc[biggest_month_index, 'Bill_Month']
-            biggest_month_sales = tickets_filt_by_month.loc[biggest_month_index, 'Total']
 
         if aggregate == 'Month':
             title = f"Monthly Sales Made in {selected_year}"
@@ -159,41 +160,35 @@ def business_dashboard():
 
 
     with chart2:
+
+        services = tickets_details_df[tickets_details_df['Type'] == 'S']
+        services['Bill_Date'] = pd.to_datetime(services['Bill_Date'])
+        services['Bill_Month'] = services['Bill_Date'].dt.strftime('%B')
+        services_filtered = services[services['Bill_Date'].dt.year == selected_year]
+        service_counts = services_filtered.groupby('Descr').agg(
+                    frequency=('Descr', 'size'),  # Rename 'size' column to 'frequency'
+                    total_sum=('Total', 'sum')
+                ).reset_index()
+        service_counts = service_counts.sort_values(by='frequency', ascending=False)
+        top_services_df = service_counts.head(3)
+        top_services = list(top_services_df['Descr'])
+        top_services = ', '.join("'" + element + "'" for element in top_services)
+        top_services_freq = list(top_services_df['frequency']) 
+
+        top_services_rev = list(top_services_df['total_sum']) 
+        top_services_rev  = [f"₹{number:,.2f}" for number in top_services_rev]
+        top_services_rev  = ', '.join(top_services_rev)
+
+
         if aggregate == 'Day':
+
             title = f"Daily Services Provided in {selected_year}"
-            services = tickets_details_df[tickets_details_df['Type'] == 'S']
-            services['Bill_Date'] = pd.to_datetime(services['Bill_Date'])
-            services_filtered = services[services['Bill_Date'].dt.year == selected_year]
-
-            # service_counts = services_filtered['Descr'].value_counts().reset_index()
-            # service_counts.columns = ['Descr', 'Service_Popularity']
-
-            service_counts = services_filtered.groupby('Descr').agg(
-                        frequency=('Descr', 'size'),  # Rename 'size' column to 'frequency'
-                        total_sum=('Total', 'sum')
-                    ).reset_index()
-            service_counts = service_counts.sort_values(by='frequency', ascending=False)
-            top_services_df = service_counts.head(3)
-            top_services = list(top_services_df['Descr'])
-            top_services = ', '.join("'" + element + "'" for element in top_services)
-            top_services_freq = list(top_services_df['frequency']) 
-
-            top_services_rev = list(top_services_df['total_sum']) 
-            top_services_rev  = [f"₹{number:,.2f}" for number in top_services_rev]
-            top_services_rev  = ', '.join(top_services_rev)
-
             fig = px.histogram(services_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
             st.plotly_chart(fig, theme="streamlit", use_container_width=True)
 
 
-
         if aggregate == 'Month':
             title = f"Monthly Services Provided in {selected_year}"
-            services = tickets_details_df[tickets_details_df['Type'] == 'S']
-            services['Bill_Date'] = pd.to_datetime(services['Bill_Date'])
-            services['Bill_Month'] = services['Bill_Date'].dt.strftime('%B')
-            #services['Bill_Date'] = pd.to_datetime(services['Start_Time'], format='%d-%m-%Y')
-            services_filtered = services[services['Bill_Date'].dt.year == selected_year]
             fig = px.histogram(services_filtered, x='Bill_Month', title=title, color_discrete_sequence = ["#8633de"])
             st.plotly_chart(fig, theme="streamlit", use_container_width=True)
     
@@ -205,47 +200,40 @@ def business_dashboard():
         )
     
     with chart3:
+
+        products = tickets_details_df[tickets_details_df['Type'] == 'P']
+
+        products['Bill_Date'] = pd.to_datetime(products['Bill_Date'])
+        products['Bill_Month'] = products['Bill_Date'].dt.strftime('%B')
+
+        products_filtered = products[products['Bill_Date'].dt.year == selected_year]
+
+        products_counts = products_filtered.groupby('Descr').agg(
+        frequency=('Qty', 'sum'),  
+        total_sum=('Total', 'sum')).reset_index()
+        products_counts = products_counts.sort_values(by='frequency', ascending=False)
+        top_products_df = products_counts.head(3)
+        top_products = list(top_products_df['Descr'])
+        top_products = ', '.join("'" + element + "'" for element in top_products)
+        top_products_freq = list(top_products_df['frequency']) 
+
+        top_products_rev = list(top_products_df['total_sum']) 
+        top_products_rev  = [f"₹{number:,.2f}" for number in top_products_rev]
+        top_products_rev  = ', '.join(top_products_rev)
+
         if aggregate == 'Day':
             title = f"Daily Products Sold in {selected_year}"
-            products = tickets_details_df[tickets_details_df['Type'] == 'P']
-            #products['Bill_Date'] = pd.to_datetime(products['Bill_Date'], format='%d-%m-%Y')
-            products['Bill_Date'] = pd.to_datetime(products['Bill_Date'])
-            products_filtered = products[products['Bill_Date'].dt.year == selected_year]
             fig = px.histogram(products_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
             st.plotly_chart(fig, theme="streamlit", use_container_width=True)
-
-            products_counts = products_filtered.groupby('Descr').agg(
-            frequency=('Qty', 'sum'),  
-            total_sum=('Total', 'sum')).reset_index()
-            products_counts = products_counts.sort_values(by='frequency', ascending=False)
-            top_products_df = products_counts.head(3)
-            top_products = list(top_products_df['Descr'])
-            top_products = ', '.join("'" + element + "'" for element in top_products)
-            top_products_freq = list(top_products_df['frequency']) 
-
-            top_products_rev = list(top_products_df['total_sum']) 
-            top_products_rev  = [f"₹{number:,.2f}" for number in top_products_rev]
-            top_products_rev  = ', '.join(top_products_rev)
-
 
 
         if aggregate == 'Month':
             title = f"Monthly Products Sold in {selected_year}"
-            products = tickets_details_df[tickets_details_df['Type'] == 'P']
-            #products['Bill_Date'] = pd.to_datetime(products['Bill_Date'], format='%d-%m-%Y')
-            products['Bill_Date'] = pd.to_datetime(products['Bill_Date'])
-            products['Bill_Month'] = products['Bill_Date'].dt.strftime('%B')
-            products_filtered = products[products['Bill_Date'].dt.year == selected_year]
             fig = px.histogram(products_filtered, x='Bill_Date', title=title, color_discrete_sequence = ["#8633de"])
             st.plotly_chart(fig, theme="streamlit", use_container_width=True)
-            st.markdown(
-            "Most popular products this month were..."
-            #.format(f"₹{total_revenue:,.2f}", selected_year, biggest_date
-        # )
-        )
 
         st.markdown(
-            "Most popular products this month were **{}** that were purchased at a quantity of **{}** respectively each bringing a total revenue of **{}**"
+            "Most popular products this year were **{}** that were purchased at a quantity of **{}** respectively each bringing a total revenue of **{}**"
             .format(top_products, top_products_freq, top_products_rev
         )
         )
