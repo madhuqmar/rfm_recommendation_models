@@ -648,53 +648,58 @@ def recommendation_model():
     st.subheader("Recommendation Model")
     st.markdown("Content-Based recommendation model based on cosine similarity of services taken by clients.")
 
-    tickets_df = st.session_state.tickets_df.copy()
-    tickets_details_df = st.session_state.tickets_details_df.copy()
+    tickets_df = pd.read_csv("data/Tickets_14Nov23_4pm.csv", encoding='ISO-8859-1', low_memory=False)
+    tickets_details_df = pd.read_excel("data/New_Ticket_Product_Details_14Nov_23.xlsx")
 
-    tickets_details_df = tickets_details_df [~tickets_details_df['Group1'].isna()]
+    try:
+        tickets_details_df['TicketID'] = tickets_details_df['TicketID'].astype('int64')
+        tickets_df['TicketID'] = tickets_df['TicketID'].astype('int64')
+
+    except ValueError:
+        tickets_details_df['TicketID'] = pd.to_numeric(tickets_details_df['TicketID'], errors='coerce')
+        tickets_df['TicketID'] = pd.to_numeric(tickets_df['TicketID'], errors='coerce')
+
+    tickets_details_df = tickets_details_df[~tickets_details_df['Group1'].isna()]
     client_services = pd.merge(tickets_details_df, tickets_df, on='TicketID', how='left')
     
     client_services['Frequency'] = client_services.groupby(['ClientID', 'Descr'])['ClientID'].transform('size')
     client_services.reset_index(inplace=True)
-    client_services = client_services.drop_duplicates()
 
     # Define other services you want to exclude
-    services_to_exclude = ['35', '10', '0']  
-    client_services = client_services[~client_services['Descr'].isin(services_to_exclude)]
-
+    # services_to_exclude = ['35', '10', '0']  
+    # client_services = client_services[~client_services['Descr'].isin(services_to_exclude)]
 
     client_services = client_services[['ClientID', 'Descr', 'Frequency']]
-
-    pivot_df = client_services.pivot_table(index='ClientID', columns='Descr', values='Frequency', fill_value=0)
+    all_pivots = client_services.pivot_table(index='ClientID', columns='Descr', values='Frequency', fill_value=0)
+    pivot_df_sample = all_pivots.sample(100, random_state=42)
 
     # Set the threshold for similarity score
-    threshold = 0.9
+    threshold = st.select_slider('Select a score threshold', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
 
-    # Calculate cosine similarity between customers
-    customer_similarity = cosine_similarity(pivot_df)
+    customer_similarity = cosine_similarity(pivot_df_sample)
 
     # Generate recommendations for each customer
     recommendations = {}
-    for idx, customer in enumerate(pivot_df.index):
+    for idx, customer in enumerate(pivot_df_sample.index):
         similar_customers = sorted(list(enumerate(customer_similarity[idx])), key=lambda x: x[1], reverse=True)
         recommendations[customer] = []
         for similar_customer, similarity_score in similar_customers[1:]:  # Exclude the customer itself
             if similarity_score > threshold:  # Check if similarity score is above the threshold
-                similar_products = pivot_df.columns[pivot_df.iloc[similar_customer] > 0].tolist()
+                similar_products = pivot_df_sample.columns[pivot_df_sample.iloc[similar_customer] > 0].tolist()
                 for product in similar_products:
-                    if pivot_df.loc[customer, product] == 0:  # Check if the customer hasn't bought the product yet
+                    if pivot_df_sample.loc[customer, product] == 0:  # Check if the customer hasn't bought the product yet
                         recommendations[customer].append((product, similarity_score))  # Store the product and its similarity score
 
-
-    cust_list = client_services["ClientID"].unique()
+    cust_list = list(pivot_df_sample.index)
     selected_customer_name = st.selectbox("Select a Known Customer", cust_list)
 
-    button = st.button("Recommend Services for **{}**".format(selected_customer_name))
-
-    if button:
-        st.text("Here are few services this customer will like..")
+    if st.button("Recommend Services for **{}**".format(selected_customer_name)):
         st.write("#")
-        st.json(recommendations[selected_customer_name])
+        if recommendations[selected_customer_name] == []:
+            st.text("Sorry, no strong recommendations are available for this customer.")
+        else:
+            st.text("Here are few services this customer will like..")
+            st.json(recommendations[selected_customer_name])
 
     
 
