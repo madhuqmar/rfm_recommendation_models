@@ -652,6 +652,15 @@ def recommendation_model():
     tickets_df = pd.read_csv("data/Tickets_14Nov23_4pm.csv", encoding='ISO-8859-1', low_memory=False)
     tickets_details_df = pd.read_excel("data/New_Ticket_Product_Details_14Nov_23.xlsx")
 
+    tickets_df['Bill_Date'] = pd.to_datetime(tickets_df['Created_Date'])
+    tickets_details_df['Bill_Date'] = pd.to_datetime(tickets_details_df['Created_Date2'])
+
+    ## USER SELECTION BOXES ##
+    unique_years = tickets_df['Bill_Date'].dt.year.unique()
+    year_list = [x for x in unique_years if not math.isnan(x)]
+    year_list = [int(x) for x in year_list]
+    selected_year = st.selectbox('Select Year', year_list)
+
     try:
         tickets_details_df['TicketID'] = tickets_details_df['TicketID'].astype('int64')
         tickets_df['TicketID'] = tickets_df['TicketID'].astype('int64')
@@ -660,8 +669,12 @@ def recommendation_model():
         tickets_details_df['TicketID'] = pd.to_numeric(tickets_details_df['TicketID'], errors='coerce')
         tickets_df['TicketID'] = pd.to_numeric(tickets_df['TicketID'], errors='coerce')
 
+
+    tickets_df_filt = tickets_df[tickets_df['Bill_Date'].dt.year == selected_year]
+
+
     tickets_details_df = tickets_details_df[~tickets_details_df['Group1'].isna()]
-    client_services = pd.merge(tickets_details_df, tickets_df, on='TicketID', how='left')
+    client_services = pd.merge(tickets_details_df, tickets_df_filt, on='TicketID', how='left')
     
     client_services['Frequency'] = client_services.groupby(['ClientID', 'Descr'])['ClientID'].transform('size')
     client_services.reset_index(inplace=True)
