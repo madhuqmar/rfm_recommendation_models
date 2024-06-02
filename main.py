@@ -392,7 +392,8 @@ def rfm_model():
     clusters_about.rename(columns={'Recency': 'Avg_Days_Since_Last_Visit', 'Frequency': 'Avg_Num_Visits', 'Monetary': 'Avg_Bill_Value'}, inplace=True)
 
     cluster_avg = sales_df[['Recency', 'Frequency', 'Monetary', 'Cluster Segment']].groupby('Cluster Segment').mean()
-    population_avg = sales_df[['Recency', 'Frequency', 'Monetary', 'Cluster Segment']].mean()
+
+    population_avg = sales_df[['Recency', 'Frequency', 'Monetary']].mean()
     relative_imp = cluster_avg / population_avg - 1
     relative_imp.reset_index(inplace=True)
     relative_imp.rename(columns={'Recency': 'Relative Recency', 'Frequency': 'Relative Frequency', 'Monetary': 'Relative Monetary'}, inplace=True)
