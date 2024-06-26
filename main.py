@@ -5,6 +5,8 @@ import math
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import logging
+from datetime import datetime
 from scipy import stats
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
@@ -645,75 +647,91 @@ def rfm_model():
         )
 
 
-def recommendation_model():
-    st.subheader("Recommendation Model")
-    st.markdown("Content-Based recommendation model based on cosine similarity of services taken by clients.")
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
+@st.cache_data
+def load_and_process_data():
+    logger.info("Loading and processing data")
     tickets_df = pd.read_csv("data/Tickets_14Nov23_4pm.csv", encoding='ISO-8859-1', low_memory=False)
     tickets_details_df = pd.read_excel("data/New_Ticket_Product_Details_14Nov_23.xlsx")
 
     tickets_df['Bill_Date'] = pd.to_datetime(tickets_df['Created_Date'])
     tickets_details_df['Bill_Date'] = pd.to_datetime(tickets_details_df['Created_Date2'])
 
-    ## USER SELECTION BOXES ##
-    unique_years = tickets_df['Bill_Date'].dt.year.unique()
-    year_list = [x for x in unique_years if not math.isnan(x)]
-    year_list = [int(x) for x in year_list]
-    selected_year = st.selectbox('Select Year', year_list)
+    tickets_details_df['TicketID'] = tickets_details_df['TicketID'].astype('int64', errors='ignore')
+    tickets_df = tickets_df[(tickets_df['TicketID'] != 'Closed') & (tickets_df['TicketID'].notna())]
+    tickets_df['TicketID'] = tickets_df['TicketID'].astype('int64', errors='ignore')
 
-    try:
-        tickets_details_df['TicketID'] = tickets_details_df['TicketID'].astype('int64')
-        tickets_df['TicketID'] = tickets_df['TicketID'].astype('int64')
+    return tickets_df, tickets_details_df
 
-    except ValueError:
-        tickets_details_df['TicketID'] = pd.to_numeric(tickets_details_df['TicketID'], errors='coerce')
-        tickets_df['TicketID'] = pd.to_numeric(tickets_df['TicketID'], errors='coerce')
-
-
-    tickets_df_filt = tickets_df[tickets_df['Bill_Date'].dt.year == selected_year]
-
-
+@st.cache_data
+def filter_and_merge_data(tickets_df, tickets_details_df):
     tickets_details_df = tickets_details_df[~tickets_details_df['Group1'].isna()]
-    client_services = pd.merge(tickets_details_df, tickets_df_filt, on='TicketID', how='left')
-    
+    client_services = pd.merge(tickets_details_df, tickets_df, on='TicketID', how='left')
     client_services['Frequency'] = client_services.groupby(['ClientID', 'Descr'])['ClientID'].transform('size')
     client_services.reset_index(inplace=True)
 
-    # Define other services you want to exclude
-    # services_to_exclude = ['35', '10', '0']  
-    # client_services = client_services[~client_services['Descr'].isin(services_to_exclude)]
+    return client_services
 
+@st.cache_data
+def create_pivot_table(client_services):
     client_services = client_services[['ClientID', 'Descr', 'Frequency']]
     all_pivots = client_services.pivot_table(index='ClientID', columns='Descr', values='Frequency', fill_value=0)
     pivot_df_sample = all_pivots.sample(100, random_state=42)
+    return pivot_df_sample
 
-    # Set the threshold for similarity score
-    threshold = st.select_slider('Select a score threshold', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
+def recommendation_model():
+    logger.info("Starting recommendation model")
+    st.subheader("Recommendation Model")
+    st.markdown("Content-Based recommendation model based on cosine similarity of services taken by clients.")
 
-    customer_similarity = cosine_similarity(pivot_df_sample)
+    start_time = datetime.now()
+    tickets_df, tickets_details_df = load_and_process_data()
+    logger.info(f"Data loaded and processed in {datetime.now() - start_time}")
 
-    # Generate recommendations for each customer
-    recommendations = {}
-    for idx, customer in enumerate(pivot_df_sample.index):
-        similar_customers = sorted(list(enumerate(customer_similarity[idx])), key=lambda x: x[1], reverse=True)
-        recommendations[customer] = []
-        for similar_customer, similarity_score in similar_customers[1:]:  # Exclude the customer itself
-            if similarity_score > threshold:  # Check if similarity score is above the threshold
-                similar_products = pivot_df_sample.columns[pivot_df_sample.iloc[similar_customer] > 0].tolist()
-                for product in similar_products:
-                    if pivot_df_sample.loc[customer, product] == 0:  # Check if the customer hasn't bought the product yet
-                        recommendations[customer].append((product, similarity_score))  # Store the product and its similarity score
+    tickets_details_df['TicketID'] = tickets_details_df['TicketID'].astype('int64', errors='ignore')
+    tickets_df['TicketID'] = tickets_df['TicketID'].astype('int64', errors='ignore')
 
-    cust_list = list(pivot_df_sample.index)
-    selected_customer_name = st.selectbox("Select a Known Customer", cust_list)
+    client_services = filter_and_merge_data(tickets_df, tickets_details_df)
+    
+    pivot_df_sample = create_pivot_table(client_services)
+    logger.info(f"Pivot table created and sampled in {datetime.now() - start_time}")
 
-    if st.button("Recommend Services for **{}**".format(selected_customer_name)):
-        st.write("#")
+    cust_list = pivot_df_sample.index.unique().tolist()
+
+    col1, col2 = st.columns(2)
+    
+    selected_customer_name = col1.selectbox("Select a Known Customer", cust_list)
+    threshold = col2.select_slider('Select a score threshold', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
+    
+    if st.button("Recommend Services"):
+        logger.info("Recommendation button clicked")
+        
+        start_time = datetime.now()
+        customer_similarity = cosine_similarity(pivot_df_sample)
+        logger.info(f"Cosine similarity calculated in {datetime.now() - start_time}")
+
+        start_time = datetime.now()
+        recommendations = {}
+        for idx, customer in enumerate(pivot_df_sample.index):
+            similar_customers = sorted(list(enumerate(customer_similarity[idx])), key=lambda x: x[1], reverse=True)
+            recommendations[customer] = []
+            for similar_customer, similarity_score in similar_customers[1:]:  # Exclude the customer itself
+                if similarity_score > threshold:  # Check if similarity score is above the threshold
+                    similar_products = pivot_df_sample.columns[pivot_df_sample.iloc[similar_customer] > 0].tolist()
+                    for product in similar_products:
+                        if pivot_df_sample.loc[customer, product] == 0:  # Check if the customer hasn't bought the product yet
+                            recommendations[customer].append((product, similarity_score))  # Store the product and its similarity score
+        logger.info(f"Recommendations generated in {datetime.now() - start_time}")
+
         if recommendations[selected_customer_name] == []:
             st.text("Sorry, no strong recommendations are available for this customer.")
         else:
-            st.text("Here are few services this customer will like..")
-            st.json(recommendations[selected_customer_name])
+            # Create a DataFrame
+            df = pd.DataFrame(recommendations[selected_customer_name], columns=["Service Description", "Confidence Score"])
+            st.dataframe(df, width=1200, height=800)
 
     
 
