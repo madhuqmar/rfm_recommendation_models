@@ -704,7 +704,7 @@ def recommendation_model():
     col1, col2 = st.columns(2)
     
     selected_customer_name = col1.selectbox("Select a Known Customer", cust_list)
-    threshold = col2.select_slider('Select a score threshold', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
+    threshold = col2.select_slider('Select a Confidence Score Threshold', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
     
     if st.button("Recommend Services"):
         logger.info("Recommendation button clicked")
@@ -730,8 +730,14 @@ def recommendation_model():
             st.text("Sorry, no strong recommendations are available for this customer.")
         else:
             # Create a DataFrame
+            col1, col2 = st.columns(2)
+            col1.write(f"**{selected_customer_name}, We think you will like the following services based on similar customers.**")
+            for index, item in enumerate(recommendations[selected_customer_name], start=1):
+                col1.write(f"{index}. {item[0]}")
+
             df = pd.DataFrame(recommendations[selected_customer_name], columns=["Service Description", "Confidence Score"])
-            st.dataframe(df, width=1200, height=800)
+            col2.write("**Confidence Report**")
+            col2.dataframe(df, width=1000, hide_index=True)
 
     
 
