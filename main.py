@@ -704,7 +704,26 @@ def recommendation_model():
     col1, col2 = st.columns(2)
     
     selected_customer_name = col1.selectbox("Select a Known Customer", cust_list)
-    threshold = col2.select_slider('Select a Confidence Score Threshold', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
+    col1.write("Select one of your clients to recommend services that they have not taken before, but will enjoy with the given probability scores (confidence scores). Based on the selected confidence score threshold and other factors, there may be no recommendations returned for the customer.")
+    
+    threshold = col2.select_slider('**Select a Confidence Score Threshold**', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
+    col2.write("The confidence score threshold is a setting that allows us to control the minimum similarity score required for a recommendation to be considered valid. For example, if the threshold is set to 0.5, the model will only recommend services from other clients whose similarity score with the target client is above 0.5. Users can select a threshold value from options like 0.25, 0.50, 0.75, and 0.95. A lower threshold (e.g., 0.25) will yield more recommendations, but they may be less relevant. A higher threshold (e.g., 0.75 or 0.95) will yield fewer, but more precise and relevant recommendations. Setting an appropriate threshold helps balance between the quantity and quality of recommendations.")
+
+    # Add download button for pivot_df_sample
+    csv = pivot_df_sample.to_csv(index=True).encode('utf-8')
+    col11, col12 = col1.columns([85, 15])
+
+    col12.download_button(
+        label="Download Data",
+        data=csv,
+        file_name='pivot_table.csv',
+        mime='text/csv',
+    )
+
+    col11.write("Download the pivot table containing the cosine similarity scores for all customers against all services:")
+
+    st.divider()
+    
     
     if st.button("Recommend Services"):
         logger.info("Recommendation button clicked")
