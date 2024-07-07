@@ -34,7 +34,7 @@ def intro():
 
     exclude_clients = ['.8220484146', '.8393863665', '.9894384197', 'C Balachander9884886817', '0', '..8220484146']
     
-    if st.button('Download your salon data before running the apps'):
+    if st.button('Download data before running the demo apps'):
         ## DOWNLOAD DATA ##
         tickets_df = pd.read_csv("data/Tickets_14Nov23_4pm.csv", encoding='ISO-8859-1', low_memory=False)
         tickets_df.dropna(subset=['ClientID'], inplace=True)
@@ -327,8 +327,9 @@ def business_dashboard():
 
 def rfm_model():
     st.subheader("RFM Model for Customer Segmentation")
-    st.markdown("Clustering of customers based on RFM values using K-Means ML model, grouping customers based on the RFM (**Recency, Frequency and Monetary**) score and tiering customer loyalty.")
-
+    st.write("The RFM (Recency, Frequency, Monetary) model is a powerful tool used in marketing to analyse customer behaviour and segment customers based on their purchasing patterns. Here’s a detailed explanation of how the RFM model works and how the tiers and buckets are categorised.")
+    st.write("Recency (R) measures how recently a customer has made a purchase. Customers who have purchased more recently are considered more likely to purchase again. Frequency (F) Measures how often a customer makes a purchase. Customers who purchase more frequently are considered more loyal. Monetary (M): Measures how much money a customer spends on purchases. Customers who spend more money are considered more valuable.")
+    
     tickets_details_df = st.session_state.tickets_details_df.copy()
     tickets_df = st.session_state.tickets_df.copy()
     clients_df = st.session_state.clients_df.copy()
@@ -484,6 +485,14 @@ def rfm_model():
     cluster1, cluster2 = st.columns([1.5, 1])
 
     with cluster1:
+        st.write("To effectively segment customers, we use the K-Means clustering algorithm to group customers based on their normalised RFM scores.")
+        st.write("""
+        ### Customer Segments
+        - **New Customers**: Recently acquired customers.
+        - **At Risk Customers**: Customers who are not making frequent purchases.
+        - **Loyal Customers**: Customers who purchase frequently and recently.
+        - **Churned Customers**: Customers who have not made recent purchases.
+        """)
         fig3 = sales_df.groupby('Cluster Segment').agg({'ClientID': lambda x: len(x)}).reset_index()
         fig3.rename(columns={'ClientID': 'Count'}, inplace=True)
         fig3['percent'] = (fig3['Count'] / fig3['Count'].sum()) * 100
@@ -502,18 +511,39 @@ def rfm_model():
         st.plotly_chart(fig, theme="streamlit", use_container_width=True)
 
     with cluster2:
-        st.write("**What the clusters mean**")
-        sns.set_style("whitegrid", {'grid.color': '.95'})
-        fig, ax = plt.subplots(figsize=(8, 5))
-        sns.lineplot(x='Attribute', y='Value', hue='Cluster Segment', data=df_nor_melt, ax=ax)
-        st.pyplot(fig)
-        
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+        st.write("")
+
         clusters_dtl.drop(columns=['Cluster'], inplace=True)
         st.dataframe(clusters_dtl)
+
+        sns.set_style("whitegrid", {'grid.color': '.95'})
+        fig, ax = plt.subplots(figsize=(8, 3))
+        sns.lineplot(x='Attribute', y='Value', hue='Cluster Segment', data=df_nor_melt, ax=ax)
+        st.pyplot(fig)
     
     rfmseg1, rfmseg2 = st.columns([1.5, 1])
 
     with rfmseg1:
+        st.write('### RFM Segments')
+        st.write("To further categorise customers, we calculate an RFM score for each customer and group them into the following categories.")
+
         # Aggregate data by each customer
         fig4 = sales_df.groupby('Segment').agg({'ClientID': lambda x: len(x)}).reset_index()
 
@@ -527,7 +557,7 @@ def rfm_model():
 
         fig = px.treemap(fig4, path=['Segment'],values='Count'
                         , width=800, height=500
-                        ,title="RFM Segments")
+                        )
 
         fig.update_layout(
             treemapcolorway = colors, #defines the colors in the treemap
@@ -538,10 +568,35 @@ def rfm_model():
 
 
     with rfmseg2:
-        st.write("**What the RFM segments mean**")
-        st.write("#")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+
+        segment_descriptions = {
+            'Hibernating': 'Customers with low recency, frequency, and monetary values. They may need re-engagement.',
+            'At risk': 'Customers who have not made purchases recently and are at risk of churning.',
+            'Can\'t lose them': 'High-value customers who have not been active recently. High priority for retention.',
+            'About to sleep': 'Customers with low engagement who may stop purchasing soon.',
+            'Need attention': 'Customers who need attention to prevent them from churning.',
+            'Loyal customers': 'Customers who purchase frequently and recently, showing loyalty.',
+            'Promising': 'Customers with potential to become loyal if nurtured properly.',
+            'New customers': 'Recently acquired customers with the potential for future loyalty.',
+            'Potential loyalists': 'Customers showing signs of becoming loyal with a bit more engagement.',
+            'Champions': 'Top customers with high recency, frequency, and monetary values. They are the most valuable.'
+        }
+
+
         rfmseg_df = sales_df.groupby(['Segment']).agg({'ClientID': lambda x: len(x), 'Recency': 'mean', 'Frequency': 'mean', 'Monetary': 'mean' }).reset_index()
         rfmseg_df.rename(columns={'ClientID': 'Customer_Count', 'Recency': 'Avg_Days_Since_Last_Visit', 'Frequency': 'Avg_Visits', 'Monetary': 'Avg_Bill_Value'}, inplace=True)
+        rfmseg_df['Description'] = rfmseg_df['Segment'].map(segment_descriptions)
+
         st.write(rfmseg_df)
 
 
@@ -550,6 +605,9 @@ def rfm_model():
     clients_subset = clients_df[['ClientID', 'FirstName', 'LastName', 'HomePhone', 'Sex', 'DOB', 'survey', 'MembershipCardNo',
                         'Membership_Date']]
     with col1:
+        st.write("### Customer Loyalty Tiers")
+        st.write("Based on the RFM score, we assign customers to different loyalty tiers.")
+
         fig5 = sales_df.groupby('Score').agg({'ClientID': lambda x: len(x)}).reset_index()
 
         # Rename columns
@@ -561,7 +619,7 @@ def rfm_model():
 
         fig = px.treemap(fig5, path=['Score'],values='Count'
                         , width=800, height=400
-                        ,title="Customer Loyalty Buckets")
+                    )
 
         fig.update_layout(
             treemapcolorway = colors, #defines the colors in the treemap
@@ -571,15 +629,33 @@ def rfm_model():
         st.plotly_chart(fig, theme='streamlit', use_container_width=True)
     
     with col2:
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
 
-        st.write("**What the loyalty tiers mean**")
-        st.write("#")
+        tier_descriptions = {
+            'Platinum': 'Top tier customers with the highest RFM scores, representing the most valuable and loyal customers.',
+            'Gold': 'High tier customers with strong loyalty and value, just below Platinum.',
+            'Silver': 'Mid-tier customers with moderate loyalty and value.',
+            'Bronze': 'Lower tier customers who are less engaged or at risk of churning.',
+            'Green': 'New or low-engagement customers who haven’t yet shown strong purchasing behavior.'
+        }
+
         loyalty_df = sales_df.groupby(['Score']).agg({'ClientID': lambda x: len(x), 'Recency': 'mean', 'Frequency': 'mean', 'Monetary': 'mean' }).reset_index()
         loyalty_df.rename(columns={'ClientID': 'Customer_Count', 'Recency': 'Avg_Days_Since_Last_Visit', 'Frequency': 'Avg_Visits', 'Monetary': 'Avg_Bill_Value'}, inplace=True)
-        st.write(loyalty_df)
+        loyalty_df.rename(columns={'Score': 'Tier'}, inplace=True)
+        loyalty_df['description'] = loyalty_df['Tier'].map(tier_descriptions)
 
+        st.dataframe(loyalty_df, width=1200)
 
-    st.write("** Download Client Data by Loyalty Tier **:")
+    st.write("### Download Client Data by Loyalty Tier")
 
     best1, best2 = st.columns(2)
 
