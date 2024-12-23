@@ -7,3 +7,5 @@ scipy
 seaborn
 streamlit
 openpyxl
+python-dotenv
+
