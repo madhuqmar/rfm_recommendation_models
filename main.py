@@ -763,6 +763,7 @@ def recommendation_model():
     st.subheader("Recommendation Model")
     st.markdown("Content-Based recommendation model based on cosine similarity of services taken by clients.")
 
+    # Load and process data
     start_time = datetime.now()
     tickets_df, tickets_details_df = load_and_process_data()
     logger.info(f"Data loaded and processed in {datetime.now() - start_time}")
@@ -771,44 +772,29 @@ def recommendation_model():
     tickets_df['TicketID'] = tickets_df['TicketID'].astype('int64', errors='ignore')
 
     client_services = filter_and_merge_data(tickets_df, tickets_details_df)
-    
     pivot_df_sample = create_pivot_table(client_services)
     logger.info(f"Pivot table created and sampled in {datetime.now() - start_time}")
 
-    cust_list = pivot_df_sample.index.unique().tolist()
-
     col1, col2 = st.columns(2)
-    
-    selected_customer_name = col1.selectbox("Select a Known Customer", cust_list)
-    col1.write("Select one of your clients to recommend services that they have not taken before, but will enjoy with the given probability scores (confidence scores). Based on the selected confidence score threshold and other factors, there may be no recommendations returned for the customer.")
-    
-    threshold = col2.select_slider('**Select a Confidence Score Threshold**', options=[0.25, 0.50, 0.75, 0.95], value=0.5)
-    col2.write("The confidence score threshold is a setting that allows us to control the minimum similarity score required for a recommendation to be considered valid. For example, if the threshold is set to 0.5, the model will only recommend services from other clients whose similarity score with the target client is above 0.5. Users can select a threshold value from options like 0.25, 0.50, 0.75, and 0.95. A lower threshold (e.g., 0.25) will yield more recommendations, but they may be less relevant. A higher threshold (e.g., 0.75 or 0.95) will yield fewer, but more precise and relevant recommendations. Setting an appropriate threshold helps balance between the quantity and quality of recommendations.")
 
-    # Add download button for pivot_df_sample
-    csv = pivot_df_sample.to_csv(index=True).encode('utf-8')
-    col11, col12 = col1.columns([85, 15])
-
-    col12.download_button(
-        label="Download Data",
-        data=csv,
-        file_name='pivot_table.csv',
-        mime='text/csv',
+    # Select confidence threshold first
+    threshold = st.select_slider(
+        '**Select a Confidence Score Threshold**',
+        options=[0.25, 0.50, 0.75, 0.95],
+        value=0.5
     )
+    st.write(
+        "The confidence score sets how similar recommendations need to be: lower scores give more options, higher scores give more accurate ones.")
 
-    col11.write("Download the pivot table containing the cosine similarity scores for all customers against all services:")
+    if threshold:
+        logger.info("Threshold selected, generating recommendations.")
 
-    st.divider()
-    
-    
-    if st.button("Recommend Services"):
-        logger.info("Recommendation button clicked")
-        
+        # Calculate cosine similarity
         start_time = datetime.now()
         customer_similarity = cosine_similarity(pivot_df_sample)
         logger.info(f"Cosine similarity calculated in {datetime.now() - start_time}")
 
-        start_time = datetime.now()
+        # Generate recommendations
         recommendations = {}
         for idx, customer in enumerate(pivot_df_sample.index):
             similar_customers = sorted(list(enumerate(customer_similarity[idx])), key=lambda x: x[1], reverse=True)
@@ -817,24 +803,64 @@ def recommendation_model():
                 if similarity_score > threshold:  # Check if similarity score is above the threshold
                     similar_products = pivot_df_sample.columns[pivot_df_sample.iloc[similar_customer] > 0].tolist()
                     for product in similar_products:
-                        if pivot_df_sample.loc[customer, product] == 0:  # Check if the customer hasn't bought the product yet
-                            recommendations[customer].append((product, similarity_score))  # Store the product and its similarity score
-        logger.info(f"Recommendations generated in {datetime.now() - start_time}")
+                        if pivot_df_sample.loc[
+                            customer, product] == 0:  # Check if the customer hasn't bought the product yet
+                            recommendations[customer].append(
+                                (product, similarity_score))  # Store product and similarity score
 
-        if recommendations[selected_customer_name] == []:
-            st.text("Sorry, no strong recommendations are available for this customer.")
+        # Filter customers with recommendations
+        cust_list_with_recommendations = [
+            customer for customer, recs in recommendations.items() if len(recs) > 0
+        ]
+
+        # Show customer select box only when filtered customers are available
+        selected_customer_name = st.selectbox(
+            "Select a Customer with Recommendations",
+            cust_list_with_recommendations
+        )
+
+        # Display recommendations for the selected customer
+        if selected_customer_name and selected_customer_name in recommendations and recommendations[
+            selected_customer_name]:
+            st.divider()
+
+            # Get the services the customer has taken (maximum 3)
+            customer_services = pivot_df_sample.columns[pivot_df_sample.loc[selected_customer_name] > 0].tolist()[
+                                :3]
+            services_taken = ", ".join(customer_services)
+
+            # Get the top 5 recommendations
+            top_recommendations = recommendations[selected_customer_name][:5]
+            recommendations_list = [f"{index + 1}. {item[0]} (Confidence: {item[1]:.2f})"
+                                    for index, item in enumerate(top_recommendations)]
+
+            # Display the personalized message
+            st.write(f"**Dear {selected_customer_name},**")
+            st.write(f"Because you've taken the following services: {services_taken}, we think you'll enjoy these:")
+            for rec in recommendations_list:
+                st.write(rec)
+
+            # Display confidence report in a dataframe
+            df = pd.DataFrame(top_recommendations, columns=["Service Description", "Confidence Score"])
+            st.write("**Confidence Report**")
+            st.dataframe(df, width=1000, hide_index=True)
         else:
-            # Create a DataFrame
-            col1, col2 = st.columns(2)
-            col1.write(f"**{selected_customer_name}, We think you will like the following services based on similar customers.**")
-            for index, item in enumerate(recommendations[selected_customer_name], start=1):
-                col1.write(f"{index}. {item[0]}")
+            st.write("Sorry, no strong recommendations are available for this customer.")
 
-            df = pd.DataFrame(recommendations[selected_customer_name], columns=["Service Description", "Confidence Score"])
-            col2.write("**Confidence Report**")
-            col2.dataframe(df, width=1000, hide_index=True)
+    # Add download button for pivot_df_sample
+    csv = pivot_df_sample.to_csv(index=True).encode('utf-8')
+    st.write(" ")
+    st.write("------------------")
+    col11, col12 = st.columns([85, 15])
+    col12.download_button(
+        label="Download Data",
+        data=csv,
+        file_name='pivot_table.csv',
+        mime='text/csv',
+    )
+    col11.write("Download the pivot table containing the cosine similarity scores for all customers against all services:")
 
-    
+
 
 
 page_names_to_funcs = {
