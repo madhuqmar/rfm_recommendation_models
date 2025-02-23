@@ -836,7 +836,7 @@ def recommendation_model():
 
             # Display the personalized message
             st.write(f"**Dear {selected_customer_name},**")
-            st.write(f"Because you've taken the following services: {services_taken}, we think you'll enjoy these:")
+            st.write(f"Because you've taken: {services_taken} in the past, we think you'll enjoy the following services:")
             for rec in recommendations_list:
                 st.write(rec)
 
