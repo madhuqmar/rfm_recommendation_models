@@ -779,12 +779,12 @@ def recommendation_model():
 
     # Select confidence threshold first
     threshold = st.select_slider(
-        '**Select a Confidence Score Threshold**',
+        '**Select a Service Match Score (Threshold)- We Recommend setting it at 0.75**',
         options=[0.25, 0.50, 0.75, 0.95],
-        value=0.5
+        value=0.75
     )
     st.write(
-        "The confidence score sets how similar recommendations need to be: lower scores give more options, higher scores give more accurate ones.")
+        "Our system filters services using a service match score to suggest services that suit you best.")
 
     if threshold:
         logger.info("Threshold selected, generating recommendations.")
@@ -815,7 +815,7 @@ def recommendation_model():
 
         # Show customer select box only when filtered customers are available
         selected_customer_name = st.selectbox(
-            "Select a Customer with Recommendations",
+            "Select a Customer",
             cust_list_with_recommendations
         )
 
