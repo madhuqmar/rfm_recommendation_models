@@ -831,18 +831,21 @@ def recommendation_model():
 
             # Get the top 5 recommendations
             top_recommendations = recommendations[selected_customer_name][:5]
-            recommendations_list = [f"{index + 1}. {item[0]} (Confidence: {item[1]:.2f})"
+            recommendations_list = [f"{index + 1}. {item[0]} - {item[1] * 100:.0f}% Match"
                                     for index, item in enumerate(top_recommendations)]
 
             # Display the personalized message
             st.write(f"**Dear {selected_customer_name},**")
-            st.write(f"Because you've taken: {services_taken} in the past, we think you'll enjoy the following services:")
+            st.write(f"Because you've taken: {services_taken} in the past, we recommend the following services based on what similar customers like you have taken and enjoyed — it could be a great addition to your beauty routine!:")
             for rec in recommendations_list:
                 st.write(rec)
 
             # Display confidence report in a dataframe
             df = pd.DataFrame(top_recommendations, columns=["Service Description", "Confidence Score"])
             st.write("**Confidence Report**")
+
+            df = df.rename(columns={"Confidence Score": "Confidence Match"})
+            df["Confidence Match"] = (df["Confidence Match"] * 100).round(0).astype(int).astype(str) + "%"
             st.dataframe(df, width=1000, hide_index=True)
         else:
             st.write("Sorry, no strong recommendations are available for this customer.")
